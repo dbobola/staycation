@@ -1,16 +1,13 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { Suspense, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { LITE, Q } from "../quality";
 import { useGame } from "../store";
 import { Instances } from "./Resort";
 import { STREET, TERRACE_Y } from "./layout";
 import { CAR_WINDSCREEN, LIMO_GLASS, carGeometries } from "./shapes";
-import { Avatar } from "../avatar/Avatar";
-import { onThisDevice } from "../data/avatars";
-import type { Outfit } from "../avatar/outfit";
 
 // The first scene: a pearl-white stretch limousine comes down the road and pulls up at the gate with you inside. It
 // waits while you say who you are, then drives off once you've stepped out. Fireworks go up over
@@ -36,8 +33,6 @@ const OUT = new THREE.CatmullRomCurve3([
 ]);
 const DRIVE_IN = 7;
 const DRIVE_OUT = 9;
-
-const CHAUFFEUR: Outfit = { kind: "staff", shirt: "#121315", trousers: "#121315" };
 
 /** Where the car is (the camera follows it in). */
 export const arrival = { x: STREET.southSlow, z: -96, heading: 0, t: 0, leaving: -1 };
@@ -93,10 +88,6 @@ export function ArrivalCar() {
       <Instances geo={geos.detail} mat={detail} items={one} />
       <mesh geometry={geos.glass} material={LIMO_GLASS} renderOrder={3} />
       <mesh geometry={geos.windscreen} material={CAR_WINDSCREEN} renderOrder={3} />
-      {/* the chauffeur, in a black suit, hands on the wheel (scaled to sit under the low roof) */}
-      <Suspense fallback={null}>
-        <Avatar avatarId={onThisDevice("bm02", Q.models)} anim="sit" outfit={CHAUFFEUR} position={[geos.driver.x, geos.driver.floor - 0.2, geos.driver.z - 0.05]} scale={0.78} shadows={false} />
-      </Suspense>
       {/* headlights on */}
       {[-0.62, 0.62].map((x) => (
         <mesh key={x} position={[x, 0.68, 3.84]}>

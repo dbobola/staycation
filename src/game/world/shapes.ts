@@ -237,41 +237,17 @@ export function loungerGeometry() {
   return mergeGeometries(parts.map((p) => (p.index ? p.toNonIndexed() : p)))!;
 }
 
-/** Car glass: the windscreen lightly tinted (you can see in), the side and back windows darker. */
+/** Car glass: blacked out all round, windscreen included (glossy, so it still catches the light). */
 export const CAR_GLASS = new THREE.MeshPhysicalMaterial({
-  color: "#1c262e",
-  transparent: true,
-  opacity: 0.72,
+  color: "#040506",
   roughness: 0.05,
-  metalness: 0.3,
+  metalness: 0.5,
   clearcoat: 1,
   clearcoatRoughness: 0.02,
   side: THREE.DoubleSide,
-  depthWrite: false,
 });
-export const CAR_WINDSCREEN = new THREE.MeshPhysicalMaterial({
-  color: "#5f7684",
-  transparent: true,
-  opacity: 0.38,
-  roughness: 0.04,
-  metalness: 0.25,
-  clearcoat: 1,
-  clearcoatRoughness: 0.02,
-  side: THREE.DoubleSide,
-  depthWrite: false,
-});
-/** The limousine's privacy glass: nearly black from outside. */
-export const LIMO_GLASS = new THREE.MeshPhysicalMaterial({
-  color: "#06080a",
-  transparent: true,
-  opacity: 0.9,
-  roughness: 0.04,
-  metalness: 0.4,
-  clearcoat: 1,
-  clearcoatRoughness: 0.02,
-  side: THREE.DoubleSide,
-  depthWrite: false,
-});
+export const CAR_WINDSCREEN = CAR_GLASS;
+export const LIMO_GLASS = CAR_GLASS;
 
 /**
  * A car, built from its side silhouette: the painted body (the lower body with wheel arches cut
@@ -387,35 +363,7 @@ export function carGeometries(kind: "sedan" | "suv" | "limo") {
   }))!;
 
   const parts: THREE.BufferGeometry[] = [];
-  // the cabin, seen through the glass: floor, dashboard, steering wheel (left-hand drive), seats
-  const trim = limo ? "#d8c7a6" : "#2b2622";
-  const box = (w: number, h: number, d: number, x: number, y: number, z: number, color: string) => {
-    const b = new THREE.BoxGeometry(w, h, d);
-    b.translate(x, y, z);
-    parts.push(colored(b, color));
-  };
   const floor = clear + 0.28;
-  box(W - 0.2, 0.04, F[0] - R[0], 0, floor, (F[0] + R[0]) / 2, "#1a1a1a");
-  box(W - 0.24, 0.2, 0.42, 0, F[1] - 0.08, F[0] - 0.22, "#1f1f22");
-  const wheel = new THREE.TorusGeometry(0.17, 0.025, 6, 16);
-  wheel.rotateX(-0.4);
-  wheel.translate(W / 4, F[1] + 0.02, F[0] - 0.55);
-  parts.push(colored(wheel, "#111111"));
-  const seat = (x: number, z: number, w: number) => {
-    box(w, 0.14, 0.5, x, floor + 0.3, z, trim);
-    box(w, 0.6, 0.12, x, floor + 0.62, z - 0.26, trim);
-  };
-  const frontSeats = F[0] - 0.95;
-  seat(W / 4, frontSeats, 0.5);
-  seat(-W / 4, frontSeats, 0.5);
-  if (limo) {
-    // the stretch: a long bench down one side facing in, and a wide bench across the back
-    box(0.5, 0.14, 2.8, -W / 2 + 0.38, floor + 0.3, -0.4, trim);
-    box(0.12, 0.55, 2.8, -W / 2 + 0.16, floor + 0.6, -0.4, trim);
-    seat(0, R[0] + 0.75, W - 0.4);
-    // a mood-light strip along the ceiling
-    box(0.05, 0.03, 4.2, 0, roofAt(-0.4) - 0.1, -0.4, "#8e4bff");
-  } else seat(0, (suv ? R[0] + 1.0 : R[0] + 0.85), W - 0.36);
   // wheels: tyre, rim, hub
   for (const [x, z] of [[-1, axleR], [1, axleR], [-1, axleF], [1, axleF]]) {
     const tyre = new THREE.CylinderGeometry(wheelR, wheelR, 0.25, 18);
