@@ -13,7 +13,8 @@ import { ATTENDANTS, SPOTS, groundY, type Attendant } from "./layout";
 import { player } from "./Player";
 
 // The staff: one at every spot, in the Silver Dome polo. Walk up and they turn to you, wave, and
-// tell you what they can do for you; the button in their bubble (or E) opens it.
+// tell you what they can do for you; the button in their bubble (or E) opens it. Once you've done
+// it, they just wave as you pass (E still opens it, to change your mind).
 
 const STAFF: Outfit = { kind: "staff", shirt: "#0e7c86", trousers: "#1d2a30" };
 
@@ -67,7 +68,8 @@ function Staff({ a }: { a: Attendant }) {
           <Avatar ref={av} avatarId={onThisDevice(a.avatar, Q.models)} outfit={STAFF} shadows={!LITE} offset={a.x % 1} />
         </Suspense>
       </group>
-      {!near && (
+      {/* once you've done what they're here for, they just wave: no card asking again */}
+      {(!near || done) && (
         <Billboard position-y={2.05}>
           <mesh position-z={-0.01}>
             <planeGeometry args={[(a.name.length + a.role.length) * 0.052 + 0.38, 0.18]} />
@@ -78,13 +80,13 @@ function Staff({ a }: { a: Attendant }) {
           </Text>
         </Billboard>
       )}
-      {near && phase === "walk" && !panel && (
+      {near && !done && phase === "walk" && !panel && (
         <Html position={[0, 2.35, 0]} center zIndexRange={[15, 5]}>
           <div className="staff-bubble">
             <div className="staff-name">
               {a.name} · {a.role}
             </div>
-            <p>{done && a.spot === "checkin" ? "You're all checked in! Enjoy the weekend 🌴" : a.line}</p>
+            <p>{a.line}</p>
             <button className="btn mt-2 w-full px-3 py-2 text-[13px]" onClick={() => useGame.getState().set({ panel: a.spot })}>
               {spot.icon} {spot.button}
             </button>

@@ -328,7 +328,8 @@ export function Player() {
         text = `${KEY} to sit${ns!.kind === "dinner" ? " and join the dinner" : ns!.kind === "bonfire" ? " by the bonfire" : ns!.kind === "dining" || ns!.kind === "bar" || ns!.kind === "courtyard" || ns!.kind === "grill" ? " and join them" : ns!.kind === "movie" ? " for movie night" : ""}`;
       } else if (sp) {
         target.current = { seat: null, spot: sp };
-        text = `${KEY}: ${spLabel}`;
+        // done already: no asking again, just a way back in to change it
+        text = st.done[sp!] ? `${KEY}: ${spLabel.split(":")[0]} ✓ (change)` : `${KEY}: ${spLabel}`;
       } else target.current = { seat: null, spot: null };
     }
     if (text !== lastPrompt.current) {
