@@ -292,7 +292,7 @@ export const ATTENDANTS: Attendant[] = [
   { spot: "roommate", x: RECEPTION.x, z: -31.25, facing: 0, avatar: "f07", name: "Bisi", role: "Reception", line: "Hello! Ready to choose who you're sharing a room with?" },
   { spot: "menu", x: BUFFET.x + 0.95, z: (BUFFET.z0 + BUFFET.z1) / 2, facing: -Math.PI / 2, avatar: "bf04", name: "Funke", role: "Buffet", line: "Dinner is served! 🍽️ Grab a seat at the long table, and pick your meals for the weekend here." },
   { spot: "menu", x: BAR.x - 0.95, z: 0.6, facing: Math.PI / 2, avatar: "m08", name: "Segun", role: "The bar", line: "What are we having today? Here's the menu." },
-  { spot: "grill", x: GRILL.x - 0.8, z: GRILL.z - 1.05, facing: 0, avatar: "m14", name: "Chef Tayo", role: "The grill", line: "Suya's on the fire! 🔥 Pick what you want for grill night." },
+  { spot: "grill", x: GRILL.x - 0.8, z: GRILL.z - 1.05, facing: 0, avatar: "m08", name: "Chef Tayo", role: "The grill", line: "Suya's on the fire! 🔥 Pick what you want for grill night." },
   { spot: "movie", x: FILM_BOARD.x + 1.3, z: FILM_BOARD.z - FILM_BOARD.w / 2 - 0.5, facing: Math.PI / 2, avatar: "fp01", name: "Kemi", role: "Movie night", line: "Movie night! 🎬 Watch the trailers on the big screen and pick tonight's film." },
   { spot: "games", x: -55, z: -12.6, facing: -Math.PI / 2, avatar: "bm05", name: "Coach Bayo", role: "Games", line: "The bonfire's lit! 🔥 Fancy a game tomorrow? Football, tug of war, Ayo… sign up and I'll sort the teams." },
   { spot: "awards", x: AWARDS.x + 2, z: AWARDS.z + 0.7, facing: 0, avatar: "f15", name: "Tobi", role: "Awards", line: "Who's the best dressed this weekend? Come and nominate them!" },

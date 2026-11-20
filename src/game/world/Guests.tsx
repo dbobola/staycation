@@ -6,7 +6,7 @@ import { Suspense, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Avatar, type AvatarHandle } from "../avatar/Avatar";
 import type { Outfit } from "../avatar/outfit";
-import { AVATARS, PLAYER_AVATARS, type AnimName } from "../data/avatars";
+import { AVATARS, DREADS_OK, DREAD_TIPS, PLAYER_AVATARS, type AnimName } from "../data/avatars";
 import { CHATTER, FLIRTS, FLIRT_LINES, GUEST_NAMES, HELLOS } from "../data/guests";
 import { LITE, Q, TIER } from "../quality";
 import { useGame } from "../store";
@@ -481,7 +481,7 @@ function Guest({ sim, name, avatarId, tags, sims }: { sim: Sim; name: string; av
   return (
     <group ref={g}>
       <Suspense fallback={null}>
-        <Avatar ref={av} avatarId={avatarId} anim={sim.anim} offset={(sim.i * 0.37) % 1} shadows={!LITE} outfit={sim.outfit} />
+        <Avatar ref={av} avatarId={avatarId} anim={sim.anim} offset={(sim.i * 0.37) % 1} shadows={!LITE} outfit={sim.outfit} dreads={DREADS_OK.has(avatarId) && Math.imul(sim.i + 1, 2654435761) >>> 28 < 7 ? DREAD_TIPS[sim.i % DREAD_TIPS.length] : null} />
       </Suspense>
       {sim.drink && <Drink sim={sim} av={av} color={sim.drink} />}
       {tags && name && (

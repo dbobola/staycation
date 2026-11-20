@@ -5,6 +5,7 @@ import { useFrame, useThree, type ThreeElements } from "@react-three/fiber";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { AVATARS, animFile, type AnimName, type Sex } from "../data/avatars";
 import { withKTX2 } from "./ktx2";
 import { outfitMaterial, skinFrom, type Outfit } from "./outfit";
@@ -62,9 +63,11 @@ type Props = ThreeElements["group"] & {
   shadows?: boolean;
   /** Swimwear, a football kit or the staff polo, painted over the avatar's own clothes. */
   outfit?: Outfit | null;
+  /** Dreadlocks, in this tip colour (the roots are black). */
+  dreads?: string | null;
 };
 
-export const Avatar = forwardRef<AvatarHandle, Props>(function Avatar({ avatarId, anim = "idle", skin, offset = 0, shadows = true, outfit = null, ...group }, ref) {
+export const Avatar = forwardRef<AvatarHandle, Props>(function Avatar({ avatarId, anim = "idle", skin, offset = 0, shadows = true, outfit = null, dreads = null, ...group }, ref) {
   const def = AVATARS.find((a) => a.id === avatarId) ?? AVATARS[0];
   const gltf = useGLTF(def.file, true, true, withKTX2);
   const clips = useClips(def.sex);
@@ -123,6 +126,31 @@ export const Avatar = forwardRef<AvatarHandle, Props>(function Avatar({ avatarId
     });
   }, [scene, skin]);
 
+  // dreadlocks: built round the head as it is in the model, then hung on the head bone so they move with it
+  useEffect(() => {
+    if (!dreads) return;
+    let headMesh: THREE.SkinnedMesh | null = null;
+    scene.traverse((o) => {
+      const m = o as THREE.SkinnedMesh;
+      if (m.isSkinnedMesh && /_head$/.test((m.material as THREE.Material).name)) headMesh = m;
+    });
+    const hm = headMesh as THREE.SkinnedMesh | null;
+    if (!hm) return;
+    const bi = hm.skeleton.bones.findIndex((b) => /Head$/.test(b.name));
+    if (bi < 0) return;
+    const bone = hm.skeleton.bones[bi];
+    const geo = dreadlocks(hm.geometry, dreads);
+    geo.applyMatrix4(hm.bindMatrix).applyMatrix4(hm.skeleton.boneInverses[bi]);
+    const mesh = new THREE.Mesh(geo, DREAD_MAT);
+    mesh.castShadow = shadows;
+    mesh.frustumCulled = false;
+    bone.add(mesh);
+    return () => {
+      bone.remove(mesh);
+      geo.dispose();
+    };
+  }, [scene, dreads, shadows]);
+
   const mixer = useMemo(() => new THREE.AnimationMixer(scene), [scene]);
   const current = useRef<THREE.AnimationAction | null>(null);
   const rate = useRef(1);
@@ -157,3 +185,77 @@ export const Avatar = forwardRef<AvatarHandle, Props>(function Avatar({ avatarId
     </group>
   );
 });
+
+const DREAD_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+
+/**
+ * Dreadlocks for a head (in the model's own space: Z up, metres, facing -Y): a close cap over the
+ * scalp, and locks from the crown falling round the back and sides to the shoulders, clear of the face.
+ */
+function dreadlocks(head: THREE.BufferGeometry, tip: string) {
+  const p = head.attributes.position;
+  let top = -Infinity;
+  for (let i = 0; i < p.count; i++) top = Math.max(top, p.getZ(i));
+  // the skull: everything in the top 12 cm
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < p.count; i++)
+    if (p.getZ(i) > top - 0.12) {
+      x0 = Math.min(x0, p.getX(i));
+      x1 = Math.max(x1, p.getX(i));
+      y0 = Math.min(y0, p.getY(i));
+      y1 = Math.max(y1, p.getY(i));
+    }
+  const rx = (x1 - x0) / 2 + 0.012, ry = (y1 - y0) / 2 + 0.012, rz = 0.115;
+  const c = new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2 + 0.006, top - rz + 0.012);
+  const root = new THREE.Color("#140d09"), end = new THREE.Color(tip);
+  const parts: THREE.BufferGeometry[] = [];
+  const paint = (g: THREE.BufferGeometry, from: THREE.Color, to: THREE.Color, z0: number, z1: number) => {
+    const n = g.attributes.position.count;
+    const col = new Float32Array(n * 3);
+    const tmp = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      const t = THREE.MathUtils.clamp((z0 - g.attributes.position.getZ(i)) / Math.max(0.001, z0 - z1), 0, 1);
+      tmp.copy(from).lerp(to, t * t);
+      col.set([tmp.r, tmp.g, tmp.b], i * 3);
+    }
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    g.deleteAttribute("uv");
+    return g;
+  };
+  // the cap
+  const cap = new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.52).rotateX(Math.PI / 2);
+  cap.scale(rx, ry, rz);
+  parts.push(paint(cap, root, root, 0, 1));
+  // the locks
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const up = new THREE.Vector3(0, 1, 0);
+  for (let ring = 0; ring < 4; ring++) {
+    const phi = 0.35 + ring * 0.33; // from the crown down
+    const count = 9 + ring * 4;
+    for (let k = 0; k < count; k++) {
+      const th = (k / count) * Math.PI * 2 + ring * 0.4; // 0 = +X, -PI/2 = front (-Y)
+      const sx = Math.sin(phi) * Math.cos(th), sy = Math.sin(phi) * Math.sin(th);
+      // keep the face clear: nothing hangs in front, the front ones are swept back
+      const front = -sy / Math.max(0.001, Math.sin(phi));
+      if (front > 0.4) continue;
+      const a = new THREE.Vector3(rx * sx, ry * sy, rz * Math.cos(phi));
+      const out = new THREE.Vector3(sx, sy, 0).normalize();
+      const len = (front > 0 ? 0.16 : 0.26) + rnd() * 0.1;
+      const b = a.clone().addScaledVector(out, 0.05 + ring * 0.01).add(new THREE.Vector3(0, front > 0.2 ? 0.05 : 0.02, -len));
+      const dir = b.clone().sub(a);
+      const L = dir.length();
+      const lock = new THREE.CylinderGeometry(0.012, 0.009, L, 5, 3);
+      lock.translate(0, -L / 2, 0); // hangs from its root
+      lock.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up.clone().negate(), dir.normalize()));
+      lock.translate(a.x, a.y, a.z);
+      parts.push(paint(lock, root, end, a.z, b.z));
+    }
+  }
+  // tipped back a little: the hairline sits up off the brow and the locks fall behind the shoulders
+  const g = mergeGeometries(parts.map((x) => x.toNonIndexed()))!;
+  g.rotateX(-0.32).translate(c.x, c.y + 0.012, c.z + 0.012);
+  g.computeVertexNormals();
+  parts.forEach((x) => x.dispose());
+  return g;
+}

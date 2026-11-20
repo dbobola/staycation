@@ -42,7 +42,7 @@ const LEVELS = {
     /** How many of the 50 dinner seats are taken. */
     diners: 44,
     /** Different avatar models loaded (each ~1 MB). */
-    models: 14,
+    models: 13,
     /** Beyond this distance people stop animating (and beyond 2× it, aren't drawn). */
     animateWithin: 70,
     /** Glowing particles (embers, fireworks). */

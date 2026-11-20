@@ -11,7 +11,6 @@ export const AVATARS: AvatarDef[] = [
   { id: "fp01", file: "/avatars/Female_Party_01.glb", sex: "f" },
   { id: "m08", file: "/avatars/Male_Adult_08.glb", sex: "m" },
   { id: "f15", file: "/avatars/Female_Adult_15.glb", sex: "f" },
-  { id: "m14", file: "/avatars/Male_Adult_14.glb", sex: "m" },
   { id: "bf01", file: "/avatars/Business_Female_01.glb", sex: "f" },
   { id: "bm05", file: "/avatars/Business_Male_05.glb", sex: "m" },
   { id: "f05", file: "/avatars/Female_Adult_05.glb", sex: "f" },
@@ -19,6 +18,11 @@ export const AVATARS: AvatarDef[] = [
   { id: "bf04", file: "/avatars/Business_Female_04.glb", sex: "f" },
   { id: "bm02", file: "/avatars/Business_Male_02.glb", sex: "m" },
 ];
+
+/** The guys whose short hair can take dreadlocks (not the afro or the hood). */
+export const DREADS_OK = new Set(["m12", "m08", "bm05", "bm02"]);
+/** Dreadlock tip colours: natural, dark brown, honey, gold. */
+export const DREAD_TIPS = ["#1c120b", "#3a2414", "#7a4a22", "#b8862f"];
 
 /** Your own avatar: female or male, picked at the bottom of the screen. */
 export const PLAYER_AVATARS = { f: "f11", m: "m04" } as const;
