@@ -193,13 +193,37 @@ export const avatarFor = (sex: "f" | "m") => PLAYER_AVATARS[sex];
 
 /** POST to the API as this browser's key card holder. */
 export async function post<T = unknown>(path: string, body: Record<string, unknown>): Promise<T> {
-  const me = useGame.getState().me;
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...body, card: me?.card, by: me?.id }),
-  });
+  const send = () => {
+    const me = useGame.getState().me;
+    return fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, card: me?.card, by: me?.id }),
+    });
+  };
+  let res = await send();
+  // the server doesn't know this phone's key card (its records were reset, or it was issued
+  // somewhere else): check in again with the same name and email, then try once more
+  if (res.status === 401 && useGame.getState().me && (await checkInAgain())) res = await send();
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error || "Something went wrong. Try again.");
   return data as T;
+}
+
+/** Check in again quietly with the name and email this phone already has. */
+async function checkInAgain() {
+  const me = useGame.getState().me;
+  if (!me?.email) return false;
+  try {
+    const res = await fetch("/api/checkin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: `${me.first} ${me.last}`.trim(), email: me.email, sex: me.sex ?? useGame.getState().sex }),
+    });
+    if (!res.ok) return false;
+    useGame.getState().checkIn({ ...(await res.json()), at: Date.now() });
+    return true;
+  } catch {
+    return false;
+  }
 }

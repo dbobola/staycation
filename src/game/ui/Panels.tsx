@@ -64,10 +64,23 @@ function NeedCheckIn({ what }: { what: string }) {
   );
 }
 
+/** What to do once you've checked in (a pick you made before you had your key card). */
+let afterCheckIn: (() => void) | null = null;
+export function checkedIn() {
+  const f = afterCheckIn;
+  afterCheckIn = null;
+  f?.();
+}
+
+/**
+ * Send a pick to the server. Not checked in yet? Check-in opens, and the pick goes through as soon
+ * as you have your key card (then you're brought back here). Anything that goes wrong is shown on
+ * screen, not just at the bottom of the list.
+ */
 function useSend() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const send = async (path: string, body: Record<string, unknown>) => {
+  const go = async (path: string, body: Record<string, unknown>) => {
     setBusy(true);
     setErr("");
     try {
@@ -75,11 +88,26 @@ function useSend() {
       useGame.getState().set({ shared });
       return true;
     } catch (e) {
-      setErr((e as Error).message);
+      const msg = (e as Error).message;
+      setErr(msg);
+      useGame.getState().say(`⚠️ ${msg}`);
       return false;
     } finally {
       setBusy(false);
     }
+  };
+  const send = (path: string, body: Record<string, unknown>): Promise<boolean> => {
+    const st = useGame.getState();
+    if (st.me) return go(path, body);
+    const back = st.panel;
+    st.set({ panel: "checkin" });
+    st.say("Check in first (just your name and email): your choice is saved straight after 🔑");
+    return new Promise((resolve) => {
+      afterCheckIn = async () => {
+        useGame.getState().set({ panel: back });
+        resolve(await go(path, body));
+      };
+    });
   };
   return { busy, err, send };
 }
@@ -98,10 +126,6 @@ function SuggestBox({ kind, placeholder, extra }: { kind: "movie" | "dish" | "ga
   const { busy, err, send } = useSend();
   const go = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!me) {
-      useGame.getState().set({ panel: "checkin" });
-      return;
-    }
     if (await send("/api/suggest", { kind, text, course })) {
       useGame.getState().say(`Thanks! “${text.trim()}” is on the list for everyone 💡`);
       setText("");
@@ -195,6 +219,8 @@ function CheckIn() {
       }
       useGame.getState().say(data.again ? `Welcome back, ${next.first}! Same key card as before 🔑` : `You're checked in, ${next.first}! 🔑`);
       setEditing(false);
+      // a pick made before checking in goes through now
+      checkedIn();
     } catch (x) {
       setError((x as Error).message);
     } finally {
@@ -522,13 +548,9 @@ function Menu({ grill }: { grill?: boolean }) {
         extra={{ value: cur.courses[0], options: cur.courses.map((id) => ({ id, label: COURSES.find((c) => c.id === id)!.label })) }}
       />
       <div className="sticky bottom-0 -mx-5 mt-4 border-t border-white/10 bg-[var(--panel)] px-5 pt-3">
-        {me ? (
-          <button className="btn w-full py-3" onClick={save} disabled={busy || !Object.keys(sel).length}>
-            {busy ? "Saving…" : `Save ${cur.label.toLowerCase()}`}
-          </button>
-        ) : (
-          <NeedCheckIn what="save your meal choices" />
-        )}
+        <button className="btn w-full py-3" onClick={save} disabled={busy || !Object.keys(sel).length}>
+          {busy ? "Saving…" : me ? `Save ${cur.label.toLowerCase()}` : `Check in & save ${cur.label.toLowerCase()}`}
+        </button>
         {err && <p className="mt-2 text-[#ff9b7a]">{err}</p>}
         <p className="pb-3 pt-2 text-[11px] text-white/45">
           Your picks:{" "}
@@ -598,7 +620,7 @@ function MovieNight() {
         </div>
       )}
       <p className="text-white/70">Watch the trailers on the big screen, then vote (one vote each; you can change it). Don&apos;t see your film? Suggest it below.</p>
-      {!me && <NeedCheckIn what="vote" />}
+      {!me && <p className="mt-2 text-[12px] text-[var(--sun)]">Tap a film to vote: you&apos;ll check in (name and email) first.</p>}
       <div className="mt-4 space-y-2">
         {[...movies]
           .sort((a, b) => (votes[b.id] ?? 0) - (votes[a.id] ?? 0))
@@ -609,10 +631,10 @@ function MovieNight() {
                 key={m.id}
                 role="button"
                 tabIndex={0}
-                aria-disabled={!me || busy}
-                onClick={() => me && !busy && vote(m.id)}
-                onKeyDown={(e) => e.key === "Enter" && me && !busy && vote(m.id)}
-                className={`movie w-full cursor-pointer text-left ${mine === m.id ? "movie-on" : ""} ${!me ? "opacity-85" : ""}`}
+                aria-disabled={busy}
+                onClick={() => !busy && vote(m.id)}
+                onKeyDown={(e) => e.key === "Enter" && !busy && vote(m.id)}
+                className={`movie w-full cursor-pointer text-left ${mine === m.id ? "movie-on" : ""}`}
               >
                 <div className="absolute inset-y-0 left-0 opacity-35" style={{ width: `${total ? (v / total) * 100 : 0}%`, background: m.color }} />
                 <div className="relative flex items-center justify-between gap-3">
@@ -686,13 +708,9 @@ function Games() {
       </div>
       <SuggestBox kind="game" placeholder="Suggest a game (e.g. Monopoly Deal)" />
       <div className="sticky bottom-0 -mx-5 mt-4 border-t border-white/10 bg-[var(--panel)] px-5 py-3">
-        {me ? (
-          <button className="btn w-full py-3" onClick={save} disabled={busy}>
-            {busy ? "Saving…" : `Count me in (${sel.length})`}
-          </button>
-        ) : (
-          <NeedCheckIn what="join games" />
-        )}
+        <button className="btn w-full py-3" onClick={save} disabled={busy}>
+          {busy ? "Saving…" : me ? `Count me in (${sel.length})` : `Check in & count me in (${sel.length})`}
+        </button>
         {err && <p className="mt-2 text-[#ff9b7a]">{err}</p>}
       </div>
     </Shell>
@@ -734,7 +752,7 @@ function Awards() {
                   <div className="font-[family-name:var(--font-serif)] text-lg font-bold">{a.title}</div>
                   <div className="text-[12px] text-white/55">{a.blurb}</div>
                 </div>
-                <button className="btn-ghost shrink-0 px-3 py-1.5 text-xs" disabled={!me} onClick={() => setOpen(open === a.id ? null : a.id)}>
+                <button className="btn-ghost shrink-0 px-3 py-1.5 text-xs" onClick={() => setOpen(open === a.id ? null : a.id)}>
                   {mine ? "Change" : "Nominate"}
                 </button>
               </div>

@@ -6,7 +6,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "rea
 import * as THREE from "three";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { AVATARS, animFile, type AnimName, type Sex } from "../data/avatars";
+import { AVATARS, animFile, toneFor, type AnimName, type Sex } from "../data/avatars";
 import { withKTX2 } from "./ktx2";
 import { outfitMaterial, skinFrom, type Outfit } from "./outfit";
 
@@ -63,11 +63,13 @@ type Props = ThreeElements["group"] & {
   shadows?: boolean;
   /** Swimwear, a football kit or the staff polo, painted over the avatar's own clothes. */
   outfit?: Outfit | null;
+  /** Skin tone (an African tone from SKIN_TONES; by default one picked for the model). */
+  tone?: string;
   /** Dreadlocks, in this tip colour (the roots are black). */
   dreads?: string | null;
 };
 
-export const Avatar = forwardRef<AvatarHandle, Props>(function Avatar({ avatarId, anim = "idle", skin, offset = 0, shadows = true, outfit = null, dreads = null, ...group }, ref) {
+export const Avatar = forwardRef<AvatarHandle, Props>(function Avatar({ avatarId, anim = "idle", skin, offset = 0, shadows = true, outfit = null, dreads = null, tone, ...group }, ref) {
   const def = AVATARS.find((a) => a.id === avatarId) ?? AVATARS[0];
   const gltf = useGLTF(def.file, true, true, withKTX2);
   const clips = useClips(def.sex);
@@ -87,8 +89,28 @@ export const Avatar = forwardRef<AvatarHandle, Props>(function Avatar({ avatarId
     return s;
   }, [gltf.scene, shadows]);
 
-  // outfits: swap the body's material for one wearing it (and back again)
+  // everyone's skin an African tone, and light hair a natural black-brown
   const gl = useThree((s) => s.gl);
+  const toneHex = tone ?? toneFor(AVATARS.indexOf(def) * 3 + 1);
+  const toneColor = useMemo(() => new THREE.Color(toneHex), [toneHex]);
+  useEffect(() => {
+    let head: THREE.MeshStandardMaterial | null = null;
+    scene.traverse((o) => {
+      const m = o as THREE.SkinnedMesh;
+      if (m.isSkinnedMesh && /_head$/.test((m.material as THREE.Material).name)) head = m.material as THREE.MeshStandardMaterial;
+    });
+    const ref = skinFrom(gl, def.id, (head as THREE.MeshStandardMaterial | null)?.map ?? null);
+    scene.traverse((o) => {
+      const m = o as THREE.SkinnedMesh;
+      if (!m.isSkinnedMesh) return;
+      for (const mat of (Array.isArray(m.material) ? m.material : [m.material]) as THREE.MeshStandardMaterial[]) {
+        if (/_head$|_body$/.test(mat.name)) recolourSkin(mat, ref, toneColor);
+        else if (/_opacity$/.test(mat.name)) mat.color.set("#3a2a20"); // hair cards and lashes
+      }
+    });
+  }, [scene, gl, def.id, toneColor]);
+
+  // outfits: swap the body's material for one wearing it (and back again)
   const outfitKey = outfit ? JSON.stringify(outfit) : "";
   useEffect(() => {
     let head: THREE.MeshStandardMaterial | null = null;
@@ -107,7 +129,8 @@ export const Avatar = forwardRef<AvatarHandle, Props>(function Avatar({ avatarId
     });
     const originals = bodies.map((b) => b.material as THREE.MeshStandardMaterial);
     if (!outfit) return;
-    const skinColor = skinFrom(gl, def.id, (head as THREE.MeshStandardMaterial | null)?.map ?? null);
+    const skinColor = toneColor;
+    void head;
     bodies.forEach((b, i) => (b.material = outfitMaterial(originals[i], outfit, skinColor, height)));
     return () => {
       bodies.forEach((b, i) => {
@@ -116,7 +139,7 @@ export const Avatar = forwardRef<AvatarHandle, Props>(function Avatar({ avatarId
       });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, outfitKey, gl, def.id]);
+  }, [scene, outfitKey, gl, def.id, toneColor]);
 
   useEffect(() => {
     if (!skin) return;
@@ -258,4 +281,34 @@ function dreadlocks(head: THREE.BufferGeometry, tip: string) {
   g.computeVertexNormals();
   parts.forEach((x) => x.dispose());
   return g;
+}
+
+/**
+ * Recolour the skin in a head or body texture to `tone`, keeping its shading: a pixel counts as
+ * skin when its hue is close to the face's own average skin colour (`ref`), so the whites of the
+ * eyes, teeth, brows and most clothes are left alone. Light hair painted on the scalp goes dark.
+ */
+function recolourSkin(mat: THREE.MeshStandardMaterial, ref: THREE.Color, tone: THREE.Color) {
+  const u = { uRef: { value: new THREE.Vector3(ref.r, ref.g, ref.b) }, uTone: { value: new THREE.Vector3(tone.r, tone.g, tone.b) } };
+  mat.onBeforeCompile = (s) => {
+    Object.assign(s.uniforms, u);
+    s.fragmentShader = s.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec3 uRef;\nuniform vec3 uTone;").replace(
+      "#include <map_fragment>",
+      `#include <map_fragment>
+      {
+        vec3 c = diffuseColor.rgb;
+        float sc = c.r + c.g + c.b + 1e-4, sr = uRef.r + uRef.g + uRef.b + 1e-4;
+        float d = distance(c / sc, uRef / sr);
+        float skin = 1.0 - smoothstep(0.08, 0.2, d);
+        float l = dot(c, vec3(0.3, 0.59, 0.11)) / max(1e-4, dot(uRef, vec3(0.3, 0.59, 0.11)));
+        vec3 toned = uTone * clamp(l, 0.0, 1.2);
+        // pale, yellowish hair (blonde) on the scalp: a natural dark brown
+        // (blonde: yellow, with red and green about equal; skin is clearly redder than it is green)
+        float blond = step(0.18, dot(c, vec3(0.3, 0.59, 0.11))) * step(c.b * 1.5, c.g) * step(c.r - c.g, 0.12 * c.r + 0.02);
+        diffuseColor.rgb = mix(mix(c, toned, skin), vec3(0.03, 0.02, 0.015) * (0.6 + l * 0.2), blond);
+      }`,
+    );
+  };
+  mat.customProgramCacheKey = () => "african-skin";
+  mat.needsUpdate = true;
 }

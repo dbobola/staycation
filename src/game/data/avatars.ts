@@ -21,14 +21,18 @@ export const AVATARS: AvatarDef[] = [
 
 /** The guys whose short hair can take dreadlocks (not the afro or the hood). */
 export const DREADS_OK = new Set(["m12", "m08", "bm05", "bm02"]);
-/** Dreadlock tip colours: natural, dark brown, honey, gold. */
-export const DREAD_TIPS = ["#1c120b", "#3a2414", "#7a4a22", "#b8862f"];
+/** Dreadlock tip colours: natural black to dark brown. */
+export const DREAD_TIPS = ["#140d08", "#1f140c", "#2a1a10", "#35210f"];
 
 /** Your own avatar: female or male, picked at the bottom of the screen. */
 export const PLAYER_AVATARS = { f: "f11", m: "m04" } as const;
 
-/** Warm skin tints multiplied over the avatars' own skin (white leaves it as it is). */
-export const SKIN_TONES = ["#b07a5a", "#9a6648", "#8a573c", "#c08a68", "#7d4e36"];
+/** African skin tones, light (caramel) to deep: every face and arm is recoloured to one of these. */
+export const SKIN_TONES = ["#b07448", "#97603c", "#7d4c2e", "#a66c44", "#5f3822", "#6e4228", "#b97c50", "#4e2e1b"];
+/** The tone someone gets: by a number of theirs (a guest's index), else by their model. */
+export function toneFor(n: number) {
+  return SKIN_TONES[((n % SKIN_TONES.length) + SKIN_TONES.length) % SKIN_TONES.length];
+}
 
 export type AnimName = "idle" | "walk" | "run" | "sit" | "wave" | "cheer" | "clap";
 
