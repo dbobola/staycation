@@ -70,10 +70,10 @@ function Staff({ a }: { a: Attendant }) {
       {!near && (
         <Billboard position-y={2.05}>
           <mesh position-z={-0.01}>
-            <planeGeometry args={[(a.name.length + a.role.length) * 0.075 + 0.6, 0.26]} />
+            <planeGeometry args={[(a.name.length + a.role.length) * 0.052 + 0.38, 0.18]} />
             <meshBasicMaterial color="#0e7c86" transparent opacity={0.92} depthWrite={false} />
           </mesh>
-          <Text fontSize={0.13} color="#ffffff" anchorX="center" anchorY="middle" fontWeight={800}>
+          <Text fontSize={0.09} color="#ffffff" anchorX="center" anchorY="middle" fontWeight={800}>
             {`${a.name} · ${a.role}`}
           </Text>
         </Billboard>

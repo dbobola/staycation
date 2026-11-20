@@ -459,8 +459,8 @@ export function Overlay() {
       {/* title */}
       <div className="absolute left-4 top-4 sm:left-6 sm:top-5">
         <div className="eyebrow tracking-[0.35em] drop">{EVENT.short}</div>
-        <div className="title text-3xl leading-none text-white drop sm:text-4xl">Staycation</div>
-        <div className="mt-1 text-[12px] font-semibold text-white/85 drop">
+        <div className="title text-2xl leading-none text-white drop sm:text-3xl">Staycation</div>
+        <div className="mt-1 text-[10.5px] font-semibold text-white/80 drop">
           {EVENT.venue} · {EVENT.city} · {EVENT.dates}
         </div>
       </div>
@@ -502,7 +502,7 @@ export function Overlay() {
         </div>
       )}
       {walk && !panel && !touch && (
-        <div className="absolute bottom-4 left-5 text-[11px] text-white/80 drop">
+        <div className="absolute bottom-3 left-4 text-[10px] text-white/70 drop">
           <b>↑ ↓</b> walk · <b>← →</b> turn · <b>Shift</b> run · <b>E</b> talk, sit or open · drag to look all round you · scroll to zoom
           {swimming && " · you're swimming 🏊"}
         </div>

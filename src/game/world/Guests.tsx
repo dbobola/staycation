@@ -26,6 +26,9 @@ let everyone: Sim[] = [];
 const names: string[] = [];
 /** The scene's clock, for timing things asked for from outside a frame. */
 let clockNow = 0;
+/** At most this many speech bubbles at once, so the screen stays clear. */
+const MAX_BUBBLES = 3;
+const bubblesUp = () => everyone.reduce((n, s) => n + (s.hiUntil ? 1 : 0), 0);
 
 /** The people near you who are sitting down (with their names). */
 function nearbySeated(x: number, z: number, r: number) {
@@ -42,6 +45,17 @@ export function tableMate(x: number, z: number) {
 export function guestSay(i: number, text: string) {
   const s = everyone[i];
   if (s) s.say = text;
+}
+
+/** You've sat down with people: the one or two nearest greet you. */
+export function greetSeated(x: number, z: number, sex: "f" | "m") {
+  const lines = sex === "m" ? ["Hey Baba, what's good? 👋🏾", "Chairman! Siddon 🙌", "My guy! You don land 😄", "Odogwu! Welcome 🥂"] : ["Ah, fine girl! Welcome 😍", "Sisi, how far? 👋🏾", "Siddon jare! 🥂", "You look good o! 🔥"];
+  const near = everyone.filter((s) => s.seat && Math.hypot(s.x - x, s.z - z) < 3.2).sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
+  const k0 = Math.floor(Math.random() * lines.length);
+  near.slice(0, 2).forEach((s, k) => {
+    s.say = lines[(k0 + k) % lines.length];
+    s.cheersUntil = clockNow + 1.6;
+  });
 }
 
 /** "Cheers!": everyone sitting round you raises their glass. Returns how many joined in. */
@@ -135,7 +149,7 @@ function freeSeat(r: () => number, kinds: Seat["kind"][]) {
   return s;
 }
 
-type Plan = { role: Role; seat?: string[]; byId?: boolean; swimwear?: boolean; drink?: boolean };
+type Plan = { role: Role; seat?: string[]; byId?: boolean; swimwear?: boolean; drink?: boolean; phone?: boolean };
 
 /** Who's doing what (fewer people on phones). */
 function cast(): Plan[] {
@@ -163,9 +177,12 @@ function cast(): Plan[] {
   // for you); on phones, a smaller party spread down the table
   const dinner = SEATS.filter((x) => x.kind === "dinner").map((x) => x.id);
   // spread down the table (as many as this device can take)
-  const step = dinner.length / Q.diners;
-  const diners = TIER === "high" ? dinner.slice(0, Q.diners) : Array.from({ length: Q.diners }, (_, k) => dinner[Math.floor(k * step)]);
-  for (const id of diners) p.push({ role: "seat", seat: [id], byId: true, drink: true });
+  // every fourth place stays free all the way along, so there's always a seat among people
+  const open = dinner.filter((id) => Number(id.split("-")[2]) % 4 !== 2);
+  const count = Math.min(Q.diners, open.length);
+  const step = open.length / count;
+  const diners = Array.from({ length: count }, (_, k) => open[Math.floor(k * step)]);
+  diners.forEach((id, k) => p.push({ role: "seat", seat: [id], byId: true, drink: true, phone: k % 5 === 2 }));
   return p;
 }
 
@@ -197,7 +214,7 @@ function makeSims(): Sim[] {
     s.wait = 0;
   };
   cast().forEach((plan, i) => {
-    const s: Sim = { i, role: plan.role, x: 0, z: 0, y: 0, heading: 0, anim: "idle", rate: 1, hiCool: 0, drink: plan.drink ? DRINKS[i % DRINKS.length] : undefined };
+    const s: Sim = { i, role: plan.role, x: 0, z: 0, y: 0, heading: 0, anim: "idle", rate: 1, hiCool: 0, drink: plan.phone ? "phone" : plan.drink ? DRINKS[i % DRINKS.length] : undefined };
     if (plan.role === "walk") walker(s);
     else if (plan.role === "swim") {
       s.x = POOL.x0 + 1 + r() * (POOL.x1 - POOL.x0 - 2);
@@ -334,7 +351,10 @@ function step(s: Sim, dt: number, t: number, sims: Sim[]) {
       if (s.next < 0) {
         s.look = [0, 0.55, -0.55, 0.35, -0.35][Math.floor(r() * 5)];
         s.next = 2.5 + r() * 4;
-        if (r() < 0.25) s.cheersUntil = t + 1.6;
+        // a toast or a selfie (the glass or phone goes up), now and then a laugh
+        const k = r();
+        if (k < 0.22) s.cheersUntil = t + 1.6;
+        else if (k < 0.26 && bubblesUp() < MAX_BUBBLES) s.say = ["Hahaha 😂", "Cheers! 🥂", "Selfie! 📸", "Yummy 😋", "Yes o! 🙌"][Math.floor(r() * 5)];
       }
       s.heading = turn(s.heading, s.seat.facing + (s.look ?? 0), Math.min(1, dt * 2.5));
     }
@@ -369,10 +389,10 @@ export function Bubble({ text, y = 2.45 }: { text: string; y?: number }) {
   return (
     <Billboard position-y={y}>
       <mesh position-z={-0.01}>
-        <planeGeometry args={[Math.max(0.7, text.length * 0.1 + 0.3), 0.34]} />
+        <planeGeometry args={[Math.max(0.36, text.length * 0.062 + 0.16), 0.2]} />
         <meshBasicMaterial color="#fff6e8" transparent opacity={0.96} depthWrite={false} />
       </mesh>
-      <Text fontSize={0.17} color="#10282d" anchorX="center" anchorY="middle" fontWeight={800}>
+      <Text fontSize={0.1} color="#10282d" anchorX="center" anchorY="middle" fontWeight={800}>
         {text}
       </Text>
     </Billboard>
@@ -420,15 +440,15 @@ function Guest({ sim, name, avatarId, tags, sims }: { sim: Sim; name: string; av
     }
     // saying hi: now and then someone near you turns, waves and says hello
     // diners talk among themselves (only when you're close enough to see it)
-    if (sim.seat?.kind === "dinner" && gs.phase === "walk" && !sim.hiUntil && Math.random() < dt * 0.04 && Math.hypot(player.x - sim.x, player.z - sim.z) < 14) {
-      sim.hiUntil = t + 3;
+    if (sim.seat?.kind === "dinner" && gs.phase === "walk" && !sim.hiUntil && Math.random() < dt * 0.012 && Math.hypot(player.x - sim.x, player.z - sim.z) < 10 && bubblesUp() < MAX_BUBBLES) {
+      sim.hiUntil = t + 2.6;
       sim.hiCool = 20;
       setHello(CHATTER[Math.floor(Math.random() * CHATTER.length)]);
     }
     if (sim.role !== "volley" && gs.phase === "walk") {
       const pd = Math.hypot(player.x - sim.x, player.z - sim.z);
       sim.hiCool = Math.max(0, (sim.hiCool ?? 0) - dt);
-      if (pd < 4.5 && sim.seat?.kind !== "dinner" && !sim.hiUntil && sim.hiCool === 0 && !(sim.flirt && gs.sex === "f") && Math.random() < dt * 0.7) {
+      if (pd < 4.5 && sim.seat?.kind !== "dinner" && !sim.hiUntil && sim.hiCool === 0 && !(sim.flirt && gs.sex === "f") && Math.random() < dt * 0.7 && bubblesUp() < MAX_BUBBLES) {
         sim.hiUntil = t + 2.8;
         sim.hiCool = 25 + Math.random() * 20;
         setHello(HELLOS[Math.floor(Math.random() * HELLOS.length)]);
@@ -468,10 +488,10 @@ function Guest({ sim, name, avatarId, tags, sims }: { sim: Sim; name: string; av
         <group ref={tag}>
           <Billboard position-y={sim.seat ? 1.65 : 2.05}>
             <mesh position-z={-0.01}>
-              <planeGeometry args={[Math.max(0.5, name.length * 0.085 + 0.25), 0.24]} />
+              <planeGeometry args={[Math.max(0.34, name.length * 0.058 + 0.16), 0.16]} />
               <meshBasicMaterial color={tagColor} transparent opacity={0.82} depthWrite={false} />
             </mesh>
-            <Text fontSize={0.14} color="#ffffff" anchorX="center" anchorY="middle" fontWeight={700}>
+            <Text fontSize={0.095} color="#ffffff" anchorX="center" anchorY="middle" fontWeight={700}>
               {name}
             </Text>
           </Billboard>
@@ -479,7 +499,7 @@ function Guest({ sim, name, avatarId, tags, sims }: { sim: Sim; name: string; av
       )}
       {hello && (
         <Suspense fallback={null}>
-          <Bubble text={hello} y={sim.seat ? 2.05 : 2.45} />
+          <Bubble text={hello} y={sim.seat ? 1.9 : 2.3} />
         </Suspense>
       )}
     </group>
@@ -488,6 +508,7 @@ function Guest({ sim, name, avatarId, tags, sims }: { sim: Sim; name: string; av
 
 const glasses = new Map<string, THREE.BufferGeometry>();
 const glassMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.1, metalness: 0.1 });
+const phoneMat = new THREE.MeshStandardMaterial({ color: "#15161a", emissive: "#5d7fb8", emissiveIntensity: 0.7, roughness: 0.3 });
 const _w = new THREE.Vector3();
 
 /** A cocktail held in someone's right hand (kept upright, following the hand). */
@@ -495,7 +516,7 @@ function Drink({ sim, av, color }: { sim: Sim; av: React.RefObject<AvatarHandle 
   const m = useRef<THREE.Mesh>(null!);
   const hand = useRef<THREE.Object3D | null>(null);
   const geo = useMemo(() => {
-    if (!glasses.has(color)) glasses.set(color, cocktailGeometry(color));
+    if (!glasses.has(color)) glasses.set(color, color === "phone" ? new THREE.BoxGeometry(0.07, 0.14, 0.012).translate(0, 0.1, 0) : cocktailGeometry(color));
     return glasses.get(color)!;
   }, [color]);
   useFrame(({ clock }) => {
@@ -514,7 +535,7 @@ function Drink({ sim, av, color }: { sim: Sim; av: React.RefObject<AvatarHandle 
     if (left > 0) m.current.position.y += 0.32 * Math.sin(Math.min(1, left / 1.6) * Math.PI);
     m.current.visible = !(sim.role === "swim");
   });
-  return <mesh ref={m} geometry={geo} material={glassMat} visible={false} />;
+  return <mesh ref={m} geometry={geo} material={color === "phone" ? phoneMat : glassMat} visible={false} />;
 }
 
 /** Pool volleyball: a net across the middle of the pool, the ball going back and forth over it. */

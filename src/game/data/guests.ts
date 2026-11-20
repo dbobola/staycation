@@ -76,17 +76,15 @@ export const FLIRT_LINES = [
 /** What the people at the dinner table say to each other. */
 export const CHATTER = [
   "Oya cheers! 🥂",
-  "😂😂😂 I no fit!",
-  "You remember SS3? Omo!",
-  "Abeg pass the jollof",
+  "Hahaha 😂",
+  "Remember SS3? 😂",
+  "Pass the jollof abeg",
   "Na lie! 😂",
-  "This chicken sweet die 🔥",
-  "To old friends! 🥂",
-  "You no change at all o",
-  "Who get aux tonight?",
+  "This chicken 🔥",
+  "To old friends 🥂",
   "E don tey o!",
-  "Na wa for you o 😂",
-  "I don chop belleful 😮‍💨",
+  "Na wa o 😂",
+  "Correct food 😋",
 ];
 
 /** What people say as you walk past. */

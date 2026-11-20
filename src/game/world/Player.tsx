@@ -10,7 +10,7 @@ import { type AnimName } from "../data/avatars";
 import { axes, bindKeyboard, input, onAction } from "../input";
 import { LITE } from "../quality";
 import { avatarFor, useGame } from "../store";
-import { guestSpots, takenSeats } from "./Guests";
+import { greetSeated, guestSpots, takenSeats } from "./Guests";
 import { DROP_OFF, WALK_IN_TO, arrival } from "./Arrival";
 import { findPath, free } from "./nav";
 import { trailerRect, updateTrailerRect } from "./Trailer";
@@ -184,7 +184,10 @@ export function Player() {
           // at a table you join the people there (the "at the table" card has the menu, a toast and gist)
           if (s.kind === "movie") st.set({ panel: "movie" });
           else if (s.kind === "bonfire") st.say("Warm by the bonfire 🔥");
-          else if (s.kind !== "lounger") st.say("You've joined them 🙌");
+          else if (s.kind !== "lounger") {
+            st.say("You've joined them 🙌");
+            greetSeated(s.x, s.z, st.sex);
+          }
           else st.say("Ahh. Lounging by the pool 🌴");
           return;
         }
@@ -344,10 +347,10 @@ export function Player() {
       {/* your name, the same size as everyone else's (in orange, so you can find yourself) */}
       <Billboard position-y={2.05}>
         <mesh position-z={-0.01}>
-          <planeGeometry args={[Math.max(0.5, tagName.length * 0.085 + 0.25), 0.24]} />
+          <planeGeometry args={[Math.max(0.34, tagName.length * 0.058 + 0.16), 0.16]} />
           <meshBasicMaterial color="#f0a04b" transparent opacity={0.92} depthWrite={false} />
         </mesh>
-        <Text fontSize={0.14} color="#1b0f08" anchorX="center" anchorY="middle" fontWeight={800}>
+        <Text fontSize={0.095} color="#1b0f08" anchorX="center" anchorY="middle" fontWeight={800}>
           {tagName}
         </Text>
       </Billboard>
