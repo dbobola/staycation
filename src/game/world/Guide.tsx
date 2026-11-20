@@ -6,7 +6,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { Avatar, type AvatarHandle } from "../avatar/Avatar";
 import type { Outfit } from "../avatar/outfit";
-import { LITE } from "../quality";
+import { LITE, Q } from "../quality";
+import { onThisDevice } from "../data/avatars";
 import { useGame } from "../store";
 import { ATTENDANTS, AWARDS, BUFFET, CHECKIN_DESK, RECEPTION, SPOTS, YEARBOOK, groundY, type SpotId } from "./layout";
 import { player, walkTo } from "./Player";
@@ -160,7 +161,7 @@ function Host() {
   return (
     <group ref={g}>
       <Suspense fallback={null}>
-        <Avatar ref={av} avatarId="f05" outfit={HOST} shadows={!LITE} />
+        <Avatar ref={av} avatarId={onThisDevice("f05", Q.models)} outfit={HOST} shadows={!LITE} />
       </Suspense>
       {(!talk || panel || !walking) && (
         <Billboard ref={tag} position-y={2.05}>

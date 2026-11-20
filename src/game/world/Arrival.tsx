@@ -9,6 +9,7 @@ import { Instances } from "./Resort";
 import { STREET, TERRACE_Y } from "./layout";
 import { CAR_WINDSCREEN, LIMO_GLASS, carGeometries } from "./shapes";
 import { Avatar } from "../avatar/Avatar";
+import { onThisDevice } from "../data/avatars";
 import type { Outfit } from "../avatar/outfit";
 
 // The first scene: a pearl-white stretch limousine comes down the road and pulls up at the gate with you inside. It
@@ -94,7 +95,7 @@ export function ArrivalCar() {
       <mesh geometry={geos.windscreen} material={CAR_WINDSCREEN} renderOrder={3} />
       {/* the chauffeur, in a black suit, hands on the wheel (scaled to sit under the low roof) */}
       <Suspense fallback={null}>
-        <Avatar avatarId="bm02" anim="sit" outfit={CHAUFFEUR} position={[geos.driver.x, geos.driver.floor - 0.2, geos.driver.z - 0.05]} scale={0.78} shadows={false} />
+        <Avatar avatarId={onThisDevice("bm02", Q.models)} anim="sit" outfit={CHAUFFEUR} position={[geos.driver.x, geos.driver.floor - 0.2, geos.driver.z - 0.05]} scale={0.78} shadows={false} />
       </Suspense>
       {/* headlights on */}
       {[-0.62, 0.62].map((x) => (

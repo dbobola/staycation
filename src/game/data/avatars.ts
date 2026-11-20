@@ -40,3 +40,17 @@ export function animFile(sex: Sex, name: AnimName) {
   }[name];
   return `/avatars/anims/${sex}_${clip}.glb`;
 }
+
+/**
+ * The avatar to use on this device: phones only download a few models (see quality.ts), so
+ * someone whose model isn't among them (the staff, the host, the chauffeur) wears one of those
+ * instead, of the same sex. Computers get everyone's own.
+ */
+export function onThisDevice(id: string, models: number) {
+  const i = AVATARS.findIndex((a) => a.id === id);
+  if (i < 0 || i < models) return id;
+  const sex = AVATARS[i].sex;
+  const mine = new Set<string>(Object.values(PLAYER_AVATARS));
+  const pool = AVATARS.slice(0, models).filter((a) => a.sex === sex && !mine.has(a.id));
+  return (pool.length ? pool[i % pool.length] : AVATARS[0]).id;
+}

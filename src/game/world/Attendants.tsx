@@ -6,7 +6,8 @@ import { Suspense, useRef, useState } from "react";
 import * as THREE from "three";
 import { Avatar, type AvatarHandle } from "../avatar/Avatar";
 import type { Outfit } from "../avatar/outfit";
-import { LITE } from "../quality";
+import { LITE, Q } from "../quality";
+import { onThisDevice } from "../data/avatars";
 import { useGame } from "../store";
 import { ATTENDANTS, SPOTS, groundY, type Attendant } from "./layout";
 import { player } from "./Player";
@@ -63,7 +64,7 @@ function Staff({ a }: { a: Attendant }) {
     <group position={[a.x, y, a.z]}>
       <group ref={g} rotation-y={a.facing}>
         <Suspense fallback={null}>
-          <Avatar ref={av} avatarId={a.avatar} outfit={STAFF} shadows={!LITE} offset={a.x % 1} />
+          <Avatar ref={av} avatarId={onThisDevice(a.avatar, Q.models)} outfit={STAFF} shadows={!LITE} offset={a.x % 1} />
         </Suspense>
       </group>
       {!near && (
