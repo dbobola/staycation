@@ -1,15 +1,18 @@
-// The event's details in one place. Dates, the association's full name and anything marked TBC
-// are placeholders to confirm with the organisers.
+// The event's details in one place.
 
 export const EVENT = {
   name: "WESCOSA Staycation",
   short: "WESCOSA",
   venue: "Silver Dome",
   city: "Ibadan",
-  /** Shown under the title; replace with the real dates. */
-  dates: "Dates TBC",
-  /** Nights of the stay, for the meal plan (Night 1 dinner, Day 2 breakfast, …). */
+  /** Shown under the title. */
+  dates: "Dec 18–20",
+  checkIn: "Fri 18 Dec, 12 noon",
+  checkOut: "Sun 20 Dec",
+  /** Nights of the stay, for the meal plan (Fri dinner, Sat breakfast, …). */
   nights: 2,
+  /** The day names of the stay, first day first (Fri 18, Sat 19, Sun 20 Dec). */
+  days: ["Fri 18", "Sat 19", "Sun 20"],
   /** Key card prefix for check-in codes. */
   cardPrefix: "SD",
 };

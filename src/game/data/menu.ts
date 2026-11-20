@@ -1,3 +1,5 @@
+import { EVENT } from "./event";
+
 // The Silver Dome menu for the weekend (placeholder dishes and descriptions, to confirm with the kitchen).
 
 export type Dish = { id: string; name: string; note: string; tag?: "veg" | "spicy" | "chef" | "alcohol" };
@@ -80,13 +82,14 @@ export const DISHES = new Map(COURSES.flatMap((c) => c.dishes.map((d) => [d.id, 
 /** The meals over the stay (each one: a main, a side and a drink; breakfast has its own list). */
 export function mealSlots(nights: number) {
   const slots: { id: string; label: string; courses: string[] }[] = [];
+  const day = (n: number, night = false) => EVENT.days[n - 1] ?? `${night ? "Night" : "Day"} ${n}`;
   for (let n = 1; n <= nights; n++) {
     if (n > 1) {
-      slots.push({ id: `d${n}-breakfast`, label: `Day ${n} · Breakfast`, courses: ["breakfast", "drinks"] });
-      slots.push({ id: `d${n}-lunch`, label: `Day ${n} · Lunch`, courses: ["mains", "sides", "drinks"] });
+      slots.push({ id: `d${n}-breakfast`, label: `${day(n)} · Breakfast`, courses: ["breakfast", "drinks"] });
+      slots.push({ id: `d${n}-lunch`, label: `${day(n)} · Lunch`, courses: ["mains", "sides", "drinks"] });
     }
-    slots.push({ id: `d${n}-dinner`, label: n === nights ? `Night ${n} · Grill night` : `Night ${n} · Dinner`, courses: n === nights ? ["grill", "sides", "drinks"] : ["mains", "sides", "drinks"] });
+    slots.push({ id: `d${n}-dinner`, label: n === nights ? `${day(n, true)} · Grill night` : `${day(n, true)} · Dinner`, courses: n === nights ? ["grill", "sides", "drinks"] : ["mains", "sides", "drinks"] });
   }
-  slots.push({ id: `d${nights + 1}-breakfast`, label: `Day ${nights + 1} · Breakfast`, courses: ["breakfast", "drinks"] });
+  slots.push({ id: `d${nights + 1}-breakfast`, label: `${day(nights + 1)} · Breakfast`, courses: ["breakfast", "drinks"] });
   return slots;
 }

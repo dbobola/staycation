@@ -181,6 +181,22 @@ function Avatar({ p, size = 44 }: { p: Person; size?: number }) {
 
 // ---------------------------------------------------------------------------------------------
 
+/** The stay: check-in and check-out. */
+function Stay() {
+  return (
+    <div className="card mt-3 grid grid-cols-2 gap-2 p-3 text-[12px]">
+      <div>
+        <div className="eyebrow">Check in</div>
+        <div className="mt-0.5 font-bold text-white">{EVENT.checkIn}</div>
+      </div>
+      <div>
+        <div className="eyebrow">Check out</div>
+        <div className="mt-0.5 font-bold text-white">{EVENT.checkOut}</div>
+      </div>
+    </div>
+  );
+}
+
 function CheckIn() {
   const me = useGame((s) => s.me);
   const sex = useGame((s) => s.sex);
@@ -245,7 +261,8 @@ function CheckIn() {
             <div className="text-4xl">🔑</div>
           </div>
         </div>
-        <p className="mt-4 text-white/70">That&apos;s it, you&apos;re in! Checking in again with the same email on another phone gives you the same card.</p>
+        <Stay />
+        <p className="mt-3 text-white/70">That&apos;s it, you&apos;re in! Checking in again with the same email on another phone gives you the same card.</p>
         <button className="btn mt-4 w-full py-3" onClick={() => set({ panel: null, focus: null })}>
           Let&apos;s go 🌴
         </button>
@@ -258,6 +275,7 @@ function CheckIn() {
   return (
     <Shell kicker="Welcome desk" title="Get your key card">
       <p className="text-white/70">Just two things and you&apos;re in.</p>
+      <Stay />
       <form onSubmit={submit} className="mt-4 space-y-3">
         <Field label="What would you like to be called?">
           <input className="input text-base" required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={40} />
