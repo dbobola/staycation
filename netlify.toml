@@ -1,0 +1,23 @@
+# Deploys like The Feast: link this GitHub repo in Netlify once, and every push to `main` builds
+# and publishes the site (pull requests get their own preview link). Netlify finds the Next.js
+# app by itself and adds its Next.js runtime; check-ins, votes and orders are kept in Netlify
+# Blobs (store "staycation"), which needs no setup.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# The 3D people and the texture decoder rarely change: let browsers and phones keep them a day and
+# reuse them for a week while quietly checking for a newer copy, so repeat visits start instantly.
+[[headers]]
+  for = "/avatars/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
+
+[[headers]]
+  for = "/basis/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
