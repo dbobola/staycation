@@ -26,10 +26,10 @@ function Shell({ kicker, title, children, wide }: { kicker: string; title: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div className="pointer-events-none fixed inset-0 z-30 flex items-end justify-center sm:items-start sm:justify-end">
+    <div className="pointer-events-none fixed inset-0 z-30 flex items-end justify-center pb-[var(--badge)] sm:items-start sm:justify-end sm:pb-0">
       <div className="absolute inset-0 bg-black/25 sm:bg-transparent pointer-events-auto sm:pointer-events-none" onClick={close} />
       <section
-        className={`panel pointer-events-auto relative flex max-h-[88dvh] w-full flex-col sm:m-4 sm:max-h-[calc(100dvh-2rem)] ${wide ? "sm:w-[560px]" : "sm:w-[440px]"}`}
+        className={`panel pointer-events-auto relative flex max-h-[calc(92dvh-var(--badge))] w-full flex-col rounded-2xl sm:m-4 sm:max-h-[calc(100dvh-2rem)] ${wide ? "sm:w-[560px]" : "sm:w-[440px]"}`}
         role="dialog"
         aria-label={title}
       >
@@ -547,7 +547,7 @@ function Menu({ grill }: { grill?: boolean }) {
         placeholder="Suggest a dish or drink (e.g. Nkwobi)"
         extra={{ value: cur.courses[0], options: cur.courses.map((id) => ({ id, label: COURSES.find((c) => c.id === id)!.label })) }}
       />
-      <div className="sticky bottom-0 -mx-5 mt-4 border-t border-white/10 bg-[var(--panel)] px-5 pt-3">
+      <div className="sticky -bottom-4 -mx-5 mt-4 border-t border-white/10 bg-[var(--panel)] px-5 pt-3">
         <button className="btn w-full py-3" onClick={save} disabled={busy || !Object.keys(sel).length}>
           {busy ? "Saving…" : me ? `Save ${cur.label.toLowerCase()}` : `Check in & save ${cur.label.toLowerCase()}`}
         </button>
@@ -707,7 +707,7 @@ function Games() {
         })}
       </div>
       <SuggestBox kind="game" placeholder="Suggest a game (e.g. Monopoly Deal)" />
-      <div className="sticky bottom-0 -mx-5 mt-4 border-t border-white/10 bg-[var(--panel)] px-5 py-3">
+      <div className="sticky -bottom-4 -mx-5 mt-4 border-t border-white/10 bg-[var(--panel)] px-5 py-3">
         <button className="btn w-full py-3" onClick={save} disabled={busy}>
           {busy ? "Saving…" : me ? `Count me in (${sel.length})` : `Check in & count me in (${sel.length})`}
         </button>

@@ -3,6 +3,8 @@
 /* Silver Dome's palette, from the photos: pool turquoise, terracotta roofs, cream walls, and a
    warm sun-orange for the things you can press. */
 :root {
+  /* room left at the bottom of the screen for the host's "Powered by" badge (bottom right) */
+  --badge: calc(64px + env(safe-area-inset-bottom, 0px));
   --pool: #2ec4d6;
   --teal: #0e5d6b;
   --deep: #0b2328;

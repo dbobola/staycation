@@ -77,29 +77,29 @@ function Setup() {
     }, 4600);
   };
   return (
-    <div className="pointer-events-auto fixed inset-x-0 bottom-0 z-30 flex justify-center p-3 sm:inset-0 sm:items-center">
-      <form onSubmit={go} className="panel w-full max-w-sm p-5 sm:rounded-2xl">
+    <div className="pointer-events-auto fixed inset-x-0 bottom-[var(--badge)] z-30 flex justify-center px-3 pb-2 sm:inset-0 sm:items-center sm:p-3">
+      <form onSubmit={go} className="panel w-full max-w-sm rounded-2xl p-4 sm:p-5">
         <div className="eyebrow">You&apos;ve arrived 🌴</div>
-        <h2 className="title mt-1 text-[28px] leading-tight">Welcome to {EVENT.venue}!</h2>
-        <p className="mt-1 text-sm text-white/70">Before you step out of the car…</p>
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <h2 className="title mt-1 text-[22px] leading-tight sm:text-[28px]">Welcome to {EVENT.venue}!</h2>
+        <p className="mt-0.5 text-[13px] text-white/70">Before you step out of the car…</p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
           {(["f", "m"] as const).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setPick(s)}
-              className={`rounded-xl border-2 px-3 py-3 text-center font-extrabold transition ${pick === s ? "border-[var(--sun)] bg-[var(--sun)] text-black" : "border-white/20 text-white/85"}`}
+              className={`rounded-xl border-2 px-3 py-2 text-center font-extrabold transition ${pick === s ? "border-[var(--sun)] bg-[var(--sun)] text-black" : "border-white/20 text-white/85"}`}
             >
-              <div className="text-3xl">{s === "f" ? "💃🏾" : "🕺🏾"}</div>
+              <div className="text-2xl">{s === "f" ? "💃🏾" : "🕺🏾"}</div>
               <div className="mt-1 text-sm uppercase tracking-wider">{s === "f" ? "Lady" : "Guy"}</div>
             </button>
           ))}
         </div>
-        <label className="mt-4 block">
+        <label className="mt-3 block">
           <span className="label">What&apos;s your name?</span>
           <input className="input text-base" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="given-name" maxLength={24} required />
         </label>
-        <button className="btn mt-4 w-full py-3.5 text-base" type="submit" disabled={!name.trim()}>
+        <button className="btn mt-3 w-full py-3 text-base" type="submit" disabled={!name.trim()}>
           Step out of the car 🎉
         </button>
       </form>
@@ -228,7 +228,7 @@ function RoommateNews() {
     const key = `match:${rm.partner}`;
     if (seen.includes(key)) return null;
     return (
-      <div className="pointer-events-auto absolute inset-x-0 bottom-24 flex justify-center px-4">
+      <div className="pointer-events-auto absolute inset-x-0 bottom-[calc(var(--badge)+36px)] flex justify-center px-4">
         <div className="panel max-w-sm p-4 text-center sm:rounded-2xl">
           <div className="text-3xl">🎉🛏️</div>
           <div className="title mt-1 text-2xl">It&apos;s a match!</div>
@@ -243,7 +243,7 @@ function RoommateNews() {
   const from = rm.wantsMe.find((id) => !seen.includes(`ask:${id}`));
   if (!from) return null;
   return (
-    <div className="pointer-events-auto absolute inset-x-0 bottom-24 flex justify-center px-4">
+    <div className="pointer-events-auto absolute inset-x-0 bottom-[calc(var(--badge)+36px)] flex justify-center px-4">
       <div className="panel max-w-sm p-4 sm:rounded-2xl">
         <div className="eyebrow">💌 Room partner request</div>
         <div className="title mt-1 text-xl leading-snug">{rm.label(from)} wants to be your room partner!</div>
@@ -308,8 +308,8 @@ function TableTalk() {
   };
   const g = gist ? GIST[gist.k] : null;
   return (
-    <div className="pointer-events-auto absolute inset-x-0 bottom-4 flex justify-center px-3 sm:bottom-6">
-      <div className="panel w-full max-w-md p-3 sm:rounded-2xl">
+    <div className="pointer-events-auto absolute inset-x-0 bottom-[var(--badge)] flex justify-center px-3">
+      <div className="panel w-full max-w-md rounded-2xl p-3">
         {g && gist ? (
           <div className="mb-2 rounded-lg bg-white/5 p-2.5 text-sm">
             <div>
@@ -419,7 +419,7 @@ function Pad() {
     </button>
   );
   return (
-    <div className="pointer-events-auto fixed bottom-5 right-4 z-20 grid grid-cols-3 grid-rows-3 gap-1.5" style={{ width: 168, height: 168 }}>
+    <div className="pointer-events-auto fixed bottom-[var(--badge)] right-4 z-20 grid grid-cols-3 grid-rows-3 gap-1.5" style={{ width: 168, height: 168 }}>
       <B k="up" label="▲" className="col-start-2 row-start-1" />
       <B k="left" label="◀" className="col-start-1 row-start-2" />
       <B k="right" label="▶" className="col-start-3 row-start-2" />
@@ -467,7 +467,7 @@ export function Overlay() {
 
       {/* the opening flight */}
       {phase === "intro" && (
-        <div className="absolute inset-x-0 bottom-10 flex flex-col items-center text-center">
+        <div className="absolute inset-x-0 bottom-[calc(var(--badge)+12px)] flex flex-col items-center text-center">
           <div className="title rise text-4xl text-white drop sm:text-6xl">Welcome to {EVENT.venue}</div>
           <div className="rise mt-2 text-sm text-white/85 drop">A weekend away for {EVENT.short}: pool, food, films, games and old friends</div>
           <button className="pointer-events-auto mt-5 text-xs uppercase tracking-[0.2em] text-white/80 underline-offset-4 hover:underline" onClick={() => set({ phase: "aerial" })}>
@@ -478,7 +478,7 @@ export function Overlay() {
 
       {/* from the air: pick your avatar, walk in */}
       {phase === "aerial" && !panel && (
-        <div className="absolute inset-x-0 bottom-4 flex flex-col items-center gap-3 px-4">
+        <div className="absolute inset-x-0 bottom-[var(--badge)] flex flex-col items-center gap-3 px-4">
           <div className="pointer-events-auto flex items-center gap-1 rounded-md bg-black/55 p-1 backdrop-blur">
             {(["f", "m"] as const).map((s) => (
               <button key={s} onClick={() => setSex(s)} className={`rounded px-4 py-2 text-xs font-bold uppercase tracking-wider ${sex === s ? "bg-[var(--sun)] text-black" : "text-white/75 hover:text-white"}`}>
@@ -495,7 +495,7 @@ export function Overlay() {
 
       {/* walking: what E does here */}
       {walk && !panel && prompt && !atTable && (
-        <div className={`absolute inset-x-0 flex justify-center px-4 ${touch ? "bottom-[200px]" : "bottom-24"}`}>
+        <div className={`absolute inset-x-0 flex justify-center px-4 ${touch ? "bottom-[calc(var(--badge)+180px)]" : "bottom-[calc(var(--badge)+36px)]"}`}>
           <button className="prompt pointer-events-auto" onClick={() => fireAction()}>
             {prompt.text}
           </button>
@@ -519,7 +519,7 @@ export function Overlay() {
       {phase === "setup" && <Setup />}
       {phase === "celebrate" && <Celebrate />}
       {phase === "arrive" && (
-        <div className="absolute inset-x-0 bottom-8 flex flex-col items-center text-center">
+        <div className="absolute inset-x-0 bottom-[calc(var(--badge)+8px)] flex flex-col items-center text-center">
           <div className="title rise text-3xl text-white drop sm:text-5xl">Pulling up at {EVENT.venue}…</div>
           <div className="rise mt-1 text-sm text-white/85 drop">{EVENT.name} · {EVENT.city}</div>
         </div>
