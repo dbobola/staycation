@@ -35,6 +35,7 @@ export const GUEST_NAMES: { name: string; sex: "f" | "m" }[] = [
   { name: "Abake", sex: "f" },
   { name: "Jummy", sex: "f" },
   { name: "Adediwura", sex: "f" },
+  { name: "Toyosi", sex: "f" },
   { name: "MK", sex: "m" },
   { name: "Ajadi", sex: "m" },
   { name: "Hotman", sex: "m" },
