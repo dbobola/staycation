@@ -8,7 +8,7 @@ export const EVENT = {
   /** Shown under the title. */
   dates: "Dec 18–20",
   checkIn: "Fri 18 Dec, 12 noon",
-  checkOut: "Sun 20 Dec",
+  checkOut: "Sun 20 Dec, 12 noon",
   /** Nights of the stay, for the meal plan (Fri dinner, Sat breakfast, …). */
   nights: 2,
   /** The day names of the stay, first day first (Fri 18, Sat 19, Sun 20 Dec). */
