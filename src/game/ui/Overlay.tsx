@@ -4,8 +4,9 @@ import { useProgress } from "@react-three/drei";
 import { useEffect, useRef, useState } from "react";
 import { EVENT } from "../data/event";
 import { fireAction, input } from "../input";
-import { post, useGame, type Shared } from "../store";
+import { logBackIn, post, useGame, type Shared } from "../store";
 import { TrailerPlayer, useRoommates } from "./Panels";
+import { isFor } from "../data/roommates";
 import { allMovies } from "../data/choices";
 import { trailerRect } from "../world/Trailer";
 import { arrival } from "../world/Arrival";
@@ -59,13 +60,12 @@ function Setup() {
   const me = useGame((s) => s.me);
   const [name, setName] = useState(me?.first || saved);
   const [pick, setPick] = useState<"f" | "m">(sex);
-  const go = (e: React.FormEvent) => {
-    e.preventDefault();
-    const n = name.trim().replace(/\s+/g, " ").slice(0, 24);
-    if (!n) return;
+  const [back, setBack] = useState(false);
+  const [code, setCode] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const step = (n: string, again = false) => {
     const st = useGame.getState();
-    st.setGuestName(n);
-    st.setSex(pick);
     // a new outfit every time you arrive
     st.set({ phase: "celebrate", respawn: st.respawn + 1, look: Math.floor(Math.random() * 1000) });
     // you step out and the car pulls away while you walk in
@@ -73,11 +73,45 @@ function Setup() {
     setTimeout(() => {
       player.heading = -Math.PI / 2; // facing in through the gate
       useGame.getState().set({ phase: "walk" });
-      useGame.getState().say(`Enjoy the weekend, ${n}! Check in with Ada at the desk 🔑`);
+      useGame.getState().say(again ? `Welcome back, ${n}! Everything you chose is still here 🔑` : `Enjoy the weekend, ${n}! Check in with Ada at the desk 🔑`);
     }, 4600);
+  };
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    const problem = await logBackIn(code.trim());
+    setBusy(false);
+    if (problem) return setErr(problem);
+    step(useGame.getState().me?.first ?? "", true);
+  };
+  const go = (e: React.FormEvent) => {
+    e.preventDefault();
+    const n = name.trim().replace(/\s+/g, " ").slice(0, 24);
+    if (!n) return;
+    const st = useGame.getState();
+    st.setGuestName(n);
+    st.setSex(pick);
+    if (st.me) return step(n, true);
+    step(n);
   };
   return (
     <div className="pointer-events-auto fixed inset-x-0 bottom-[var(--badge)] z-30 flex justify-center px-3 pb-2 sm:inset-0 sm:items-center sm:p-3">
+      {back ? (
+        <form onSubmit={login} className="panel w-full max-w-sm rounded-2xl p-4 sm:p-5">
+          <div className="eyebrow">Welcome back 👋🏾</div>
+          <h2 className="title mt-1 text-[22px] leading-tight sm:text-[28px]">Log back in</h2>
+          <p className="mt-0.5 text-[13px] text-white/70">Your key card code (like SD-ABC123) or the email you checked in with.</p>
+          <input className="input mt-3 text-base" value={code} onChange={(e) => setCode(e.target.value)} placeholder="SD-ABC123 or you@email.com" autoComplete="email" autoCapitalize="none" required />
+          {err && <p className="mt-2 text-[13px] text-[#ff9b7a]">{err}</p>}
+          <button className="btn mt-3 w-full py-3 text-base" type="submit" disabled={busy || !code.trim()}>
+            {busy ? "Finding you…" : "Log me in 🔑"}
+          </button>
+          <button type="button" className="mt-2 w-full text-[12px] text-white/60 underline" onClick={() => setBack(false)}>
+            First time here? Start fresh
+          </button>
+        </form>
+      ) : (
       <form onSubmit={go} className="panel w-full max-w-sm rounded-2xl p-4 sm:p-5">
         <div className="eyebrow">You&apos;ve arrived 🌴</div>
         <h2 className="title mt-1 text-[22px] leading-tight sm:text-[28px]">Welcome to {EVENT.venue}!</h2>
@@ -102,7 +136,13 @@ function Setup() {
         <button className="btn mt-3 w-full py-3 text-base" type="submit" disabled={!name.trim()}>
           Step out of the car 🎉
         </button>
+        {!me && (
+          <button type="button" className="mt-2 w-full text-[12px] text-white/60 underline" onClick={() => setBack(true)}>
+            Been here before? Log back in
+          </button>
+        )}
       </form>
+      )}
     </div>
   );
 }
@@ -195,86 +235,193 @@ function NextCard() {
  */
 function RoommateNews() {
   const rm = useRoommates();
+  const declines = useGame((s) => s.shared.declines);
   const [busy, setBusy] = useState(false);
+  // what you've already been told: kept on this phone (a new phone, or logging in again
+  // elsewhere, tells you again); "not now" on a request only lasts until you come back
   const [seen, setSeen] = useState<string[]>(() => {
     try {
-      return JSON.parse(sessionStorage.getItem("silverdome:rm-seen") ?? "[]");
+      return [...JSON.parse(localStorage.getItem("silverdome:rm-told") ?? "[]"), ...JSON.parse(sessionStorage.getItem("silverdome:rm-seen") ?? "[]")];
     } catch {
       return [];
     }
   });
-  const hide = (key: string) => {
+  const hide = (key: string, forGood = true) => {
     const next = [...seen, key];
     setSeen(next);
     try {
-      sessionStorage.setItem("silverdome:rm-seen", JSON.stringify(next));
+      const store = forGood ? localStorage : sessionStorage;
+      const name = forGood ? "silverdome:rm-told" : "silverdome:rm-seen";
+      store.setItem(name, JSON.stringify([...JSON.parse(store.getItem(name) ?? "[]"), key]));
     } catch {
       /* fine */
     }
   };
+  // the partner you had last time (so you hear about it if they swap)
+  const [last, setLast] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("silverdome:rm-partner");
+    } catch {
+      return null;
+    }
+  });
+  const remember = (id: string | null) => {
+    setLast(id);
+    try {
+      if (id) localStorage.setItem("silverdome:rm-partner", id);
+      else localStorage.removeItem("silverdome:rm-partner");
+    } catch {
+      /* fine */
+    }
+  };
+  useEffect(() => {
+    if (rm?.partner && rm.partner !== last) remember(rm.partner);
+  }, [rm?.partner, last]);
   if (!rm) return null;
   const send = async (path: string, body: Record<string, unknown>) => {
     setBusy(true);
     try {
       useGame.getState().set({ shared: await post<Shared>(path, body) });
+      return true;
     } catch (e) {
       useGame.getState().say((e as Error).message);
+      return false;
     } finally {
       setBusy(false);
     }
   };
-  // a match you haven't celebrated yet
-  if (rm.partner) {
-    const key = `match:${rm.partner}`;
-    if (seen.includes(key)) return null;
-    return (
-      <div className="pointer-events-auto absolute inset-x-0 bottom-[calc(var(--badge)+36px)] flex justify-center px-4">
-        <div className="panel max-w-sm p-4 text-center sm:rounded-2xl">
-          <div className="text-3xl">🎉🛏️</div>
-          <div className="title mt-1 text-2xl">It&apos;s a match!</div>
-          <p className="mt-1 text-white/80">You and {rm.label(rm.partner)} are room partners. Reception will put you together.</p>
-          <button className="btn mt-3 w-full" onClick={() => hide(key)}>
-            Yay! 🙌
-          </button>
-        </div>
-      </div>
-    );
-  }
-  const from = rm.wantsMe.find((id) => !seen.includes(`ask:${id}`));
-  if (!from) return null;
-  return (
+  const accept = async (from: string) => {
+    if (await send("/api/roommate", { to: from })) {
+      useGame.getState().setPicks({ roommate: from });
+      useGame.getState().markDone("roommate");
+    }
+  };
+  const Card = ({ children, center }: { children: React.ReactNode; center?: boolean }) => (
     <div className="pointer-events-auto absolute inset-x-0 bottom-[calc(var(--badge)+36px)] flex justify-center px-4">
-      <div className="panel max-w-sm p-4 sm:rounded-2xl">
-        <div className="eyebrow">💌 Room partner request</div>
-        <div className="title mt-1 text-xl leading-snug">{rm.label(from)} wants to be your room partner!</div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <button
-            className="btn col-span-2"
-            disabled={busy}
-            onClick={async () => {
-              await send("/api/roommate", { to: from });
-              useGame.getState().setPicks({ roommate: from });
-              useGame.getState().markDone("roommate");
-            }}
-          >
-            Accept 🤝
-          </button>
-          <button className="btn-ghost" disabled={busy} onClick={() => hide(`ask:${from}`)}>
-            Not now
-          </button>
-        </div>
+      <div className={`panel w-full max-w-sm rounded-2xl p-4 ${center ? "text-center" : ""}`}>{children}</div>
+    </div>
+  );
+
+  // 1. a new match: they accepted you (or you them)
+  if (rm.partner && !seen.includes(`match:${rm.partner}`))
+    return (
+      <Card center>
+        <div className="text-3xl">🎉🛏️</div>
+        <div className="title mt-1 text-2xl">It&apos;s a match!</div>
+        <p className="mt-1 text-white/80">You and {rm.label(rm.partner)} are room partners. Reception will put you together.</p>
+        <button className="btn mt-3 w-full" onClick={() => hide(`match:${rm.partner}`)}>
+          Yay! 🙌
+        </button>
+      </Card>
+    );
+
+  // 2. your partner swapped to someone else
+  if (!rm.partner && last && !(rm.mine === last && rm.pairOf(last)) && !seen.includes(`lost:${last}`))
+    return (
+      <Card>
+        <div className="eyebrow">🛏️ Room partner update</div>
+        <div className="title mt-1 text-xl leading-snug">{rm.label(last)} has swapped to another room partner</div>
+        <p className="mt-1 text-white/70">Pick someone else at reception (or snatch them back 😏).</p>
         <button
-          className="mt-2 w-full text-center text-xs text-white/55 underline"
-          disabled={busy}
-          onClick={async () => {
-            await send("/api/decline", { from });
-            hide(`ask:${from}`);
+          className="btn mt-3 w-full"
+          onClick={() => {
+            hide(`lost:${last}`);
+            remember(null);
+            useGame.getState().set({ panel: "roommate" });
           }}
         >
-          No thanks, decline
+          Choose again
+        </button>
+        <button
+          className="mt-2 w-full text-xs text-white/55 underline"
+          onClick={() => {
+            hide(`lost:${last}`);
+            remember(null);
+          }}
+        >
+          OK
+        </button>
+      </Card>
+    );
+
+  // 2b. the person you asked is rooming with someone else now (worked out from what's saved, so
+  // you hear it on any phone)
+  const target = rm.mine && !rm.mine.startsWith("name:") ? rm.mine : null;
+  const theirs = target ? rm.pairOf(target) : undefined;
+  if (!rm.partner && target && theirs && theirs !== rm.me.id && !seen.includes(`taken:${target}:${theirs}`))
+    return (
+      <Card>
+        <div className="eyebrow">🛏️ Room partner update</div>
+        <div className="title mt-1 text-xl leading-snug">
+          {rm.label(target)} is rooming with {rm.label(theirs)} now
+        </div>
+        <p className="mt-1 text-white/70">Pick someone else, or snatch them back 😏</p>
+        <button
+          className="btn mt-3 w-full"
+          onClick={() => {
+            hide(`taken:${target}:${theirs}`);
+            useGame.getState().set({ panel: "roommate" });
+          }}
+        >
+          Choose again
+        </button>
+        <button className="mt-2 w-full text-xs text-white/55 underline" onClick={() => hide(`taken:${target}:${theirs}`)}>
+          OK
+        </button>
+      </Card>
+    );
+
+  // 3. the person you asked said no
+  const no = (declines ?? []).find((d) => d.from === rm.me.id && rm.mine && rm.person(d.by) && isFor(rm.mine, rm.person(d.by)!) && !seen.includes(`no:${d.by}`));
+  if (no)
+    return (
+      <Card>
+        <div className="eyebrow">🛏️ Room partner update</div>
+        <div className="title mt-1 text-xl leading-snug">{rm.label(no.by)} said no this time</div>
+        <p className="mt-1 text-white/70">No wahala: pick someone else at reception.</p>
+        <button
+          className="btn mt-3 w-full"
+          onClick={() => {
+            hide(`no:${no.by}`);
+            useGame.getState().set({ panel: "roommate" });
+          }}
+        >
+          Choose again
+        </button>
+        <button className="mt-2 w-full text-xs text-white/55 underline" onClick={() => hide(`no:${no.by}`)}>
+          OK
+        </button>
+      </Card>
+    );
+
+  // 4. someone wants you (or wants to snatch you from your partner)
+  const from = rm.wantsMe.find((id) => id !== rm.partner && !seen.includes(`ask:${id}`));
+  if (!from) return null;
+  const snatch = !!rm.partner;
+  return (
+    <Card>
+      <div className="eyebrow">{snatch ? "😏 Snatch request" : "💌 Room partner request"}</div>
+      <div className="title mt-1 text-xl leading-snug">
+        {snatch ? `${rm.label(from)} wants to snatch you from ${rm.label(rm.partner!)}!` : `${rm.label(from)} wants to be your room partner!`}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <button className="btn col-span-2" disabled={busy} onClick={() => accept(from)}>
+          {snatch ? "Swap to them 🔁" : "Accept 🤝"}
+        </button>
+        <button className="btn-ghost" disabled={busy} onClick={() => hide(`ask:${from}`, false)}>
+          Not now
         </button>
       </div>
-    </div>
+      <button
+        className="mt-2 w-full text-center text-xs text-white/55 underline"
+        disabled={busy}
+        onClick={async () => {
+          if (await send("/api/decline", { from })) hide(`ask:${from}`);
+        }}
+      >
+        {snatch ? `No, I'm staying with ${rm.label(rm.partner!)}` : "No thanks, decline"}
+      </button>
+    </Card>
   );
 }
 

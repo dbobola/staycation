@@ -7,14 +7,14 @@ import type { Person } from "../data/samples";
 import { GUEST_NAMES } from "../data/guests";
 import { allAwards, allGames, allMovies, dishName, dishesFor } from "../data/choices";
 import { isFor, sameName } from "../data/roommates";
-import { post, useGame, type Me, type Shared } from "../store";
+import { logBackIn, post, useGame, type Me, type Shared } from "../store";
 import type { SpotId } from "../world/layout";
 
 // The panels each spot opens: check-in, the Yearbook, room partners, the menu, movie night, games
 // and the awards. On a computer they slide in from the right (the camera has flown to the spot on
 // the left); on a phone they're a sheet from the bottom.
 
-const fullName = (p: Person) => `${p.first} ${p.last}`;
+const fullName = (p: Person) => `${p.first} ${p.last ?? ""}`.trim();
 
 function Shell({ kicker, title, children, wide }: { kicker: string; title: string; children: React.ReactNode; wide?: boolean }) {
   const set = useGame((s) => s.set);
@@ -181,6 +181,40 @@ function Avatar({ p, size = 44 }: { p: Person; size?: number }) {
 
 // ---------------------------------------------------------------------------------------------
 
+/** Already checked in (another phone, cleared browser)? Your key card code or email brings you back. */
+function LogBackIn() {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!open)
+    return (
+      <button className="mt-3 w-full text-[12px] text-white/60 underline" onClick={() => setOpen(true)}>
+        Already checked in? Log back in
+      </button>
+    );
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    const problem = await logBackIn(code.trim());
+    setBusy(false);
+    if (problem) return setErr(problem);
+    useGame.getState().say(`Welcome back, ${useGame.getState().me?.first}! Everything you chose is still here 🔑`);
+    checkedIn();
+  };
+  return (
+    <form onSubmit={go} className="card mt-4 p-3">
+      <div className="eyebrow">Log back in</div>
+      <input className="input mt-2 text-base" value={code} onChange={(e) => setCode(e.target.value)} placeholder="SD-ABC123 or you@email.com" autoCapitalize="none" required />
+      {err && <p className="mt-2 text-[13px] text-[#ff9b7a]">{err}</p>}
+      <button className="btn mt-2 w-full py-2.5" type="submit" disabled={busy || !code.trim()}>
+        {busy ? "Finding you…" : "Log me in 🔑"}
+      </button>
+    </form>
+  );
+}
+
 /** The stay: check-in and check-out. */
 function Stay() {
   return (
@@ -288,6 +322,7 @@ function CheckIn() {
           {busy ? "Checking you in…" : "Get my key card 🔑"}
         </button>
       </form>
+      <LogBackIn />
     </Shell>
   );
 }
@@ -399,7 +434,15 @@ export function useRoommates() {
     const wantsMe = shared.roommates.filter((r) => r.from !== me.id && isFor(r.to, me) && !declined.has(r.from)).map((r) => r.from);
     // a match: I asked them (by id or by their name) and they asked me
     const partner = mine ? wantsMe.find((id) => person(id) && isFor(mine, person(id)!)) : undefined;
-    return { me, mine, wantsMe, partner, label, person };
+    // everyone's matches: two people who've asked for each other (so you can see who's taken)
+    const pairs = new Map<string, string>();
+    for (const r of shared.roommates) {
+      const a = person(r.from);
+      if (!a) continue;
+      const back = shared.roommates.find((x) => x.from !== r.from && person(x.from) && isFor(r.to, person(x.from)!) && isFor(x.to, a));
+      if (back) pairs.set(r.from, back.from);
+    }
+    return { me, mine, wantsMe, partner, label, person, pairOf: (id: string) => pairs.get(id) };
   }, [me, shared]);
 }
 
@@ -432,13 +475,13 @@ function Roommate() {
     if (!me) {
       // not checked in yet: check in first, then the request goes
       useGame.getState().set({ pendingRoommate: to, panel: "checkin" });
-      useGame.getState().say(`Get your key card first, then we'll ask ${label(to)} for you 🔑`);
       return;
     }
     if (await send("/api/roommate", { to })) {
       useGame.getState().setPicks({ roommate: to });
       useGame.getState().markDone("roommate");
-      useGame.getState().say(to ? `Request sent to ${label(to)} 🛏️` : "Room partner cleared");
+      const taken = rm?.pairOf(to) && rm.pairOf(to) !== me.id;
+      useGame.getState().say(!to ? "Room partner cleared" : taken ? `Snatch request sent to ${label(to)} 😏` : `Request sent to ${label(to)} 🛏️`);
     }
   };
   const decline = async (from: string) => {
@@ -446,7 +489,7 @@ function Roommate() {
   };
   return (
     <Shell kicker="Reception" title="Room partner">
-      <p className="text-white/70">Pick anyone coming, even if they haven&apos;t checked in yet. They&apos;ll see your request when they arrive; when they accept, you&apos;re room partners.</p>
+      <p className="text-white/70">Pick anyone coming. When they accept, you&apos;re room partners.</p>
       {!me && <p className="mt-2 text-[12px] text-[var(--sun)]">You&apos;ll check in (name and email) when you choose: it only takes a moment.</p>}
       {partner ? (
         <div className="card mt-3 border-[#7fd3d9]/50 p-4">
@@ -458,21 +501,21 @@ function Roommate() {
         <div className="card mt-3 p-4">
           <div className="eyebrow">Your request</div>
           <div className="mt-1 font-bold">{label(mine)}</div>
-          <div className="text-xs text-white/55">{mine.startsWith("name:") ? "Not here yet: they'll see it when they arrive." : "Waiting for them to accept."}</div>
+          <div className="text-xs text-white/55">Waiting for them to accept.</div>
           <button className="mt-2 text-xs text-white/60 underline" onClick={() => choose("")} disabled={busy}>
             Cancel my request
           </button>
         </div>
       ) : null}
-      {!partner && wantsMe.length > 0 && (
+      {wantsMe.some((id) => id !== partner) && (
         <div className="card mt-3 p-4">
-          <div className="eyebrow">💌 They want to room with you</div>
-          {wantsMe.map((id) => (
+          <div className="eyebrow">{partner ? "😏 They want to snatch you" : "💌 They want to room with you"}</div>
+          {wantsMe.filter((id) => id !== partner).map((id) => (
             <div key={id} className="mt-2 flex items-center justify-between gap-2">
               <span className="font-bold">{label(id)}</span>
               <span className="flex gap-1.5">
                 <button className="btn px-3 py-1.5 text-xs" onClick={() => choose(id)} disabled={busy}>
-                  Accept 🤝
+                  {partner ? "Swap 🔁" : "Accept 🤝"}
                 </button>
                 <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => decline(id)} disabled={busy}>
                   Decline
@@ -489,10 +532,14 @@ function Roommate() {
             <Avatar p={o.p ?? { id: o.key, first: o.name, last: "" }} size={36} />
             <div className="min-w-0 flex-1">
               <div className="truncate font-bold">{o.name}</div>
-              <div className="text-[11px] text-white/50">{o.here ? "Checked in" : "Not checked in yet"}</div>
+              {o.here && <div className="text-[11px] text-white/50">{rm?.pairOf(o.key) && rm.pairOf(o.key) !== me?.id ? `Rooming with ${label(rm.pairOf(o.key)!)}` : "Here ✓"}</div>}
             </div>
             {mine === o.key ? (
-              <span className="text-xs text-[var(--sun)]">Requested</span>
+              <span className="text-xs text-[var(--sun)]">{partner === o.key ? "Your partner 🤝" : "Requested"}</span>
+            ) : rm?.pairOf(o.key) && rm.pairOf(o.key) !== me?.id ? (
+              <button className="btn-ghost px-3 py-1.5 text-xs" disabled={busy} onClick={() => choose(o.key)} title={`Ask ${o.name} to swap to you`}>
+                Snatch 😏
+              </button>
             ) : (
               <button className="btn-ghost px-3 py-1.5 text-xs" disabled={busy} onClick={() => choose(o.key)}>
                 Choose

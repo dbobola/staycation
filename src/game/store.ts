@@ -77,6 +77,8 @@ type State = {
   picks: Picks;
   /** The trailer playing on the big screen (a movie id), or null. */
   nowShowing: string | null;
+  /** A member of staff is talking to you (their card is up): the host keeps quiet. */
+  staffTalking: boolean;
   /** Someone you picked as room partner before checking in: asked for as soon as you have your key card. */
   pendingRoommate: string | null;
   /** The weekend checklist (Sims-style goals). */
@@ -119,6 +121,7 @@ export const useGame = create<State>((set, get) => ({
   picks: load<Picks>(PICKS_KEY, { meals: {}, games: [], awards: {} }),
   pendingRoommate: null,
   nowShowing: null,
+  staffTalking: false,
   done: load(DONE_KEY, {}),
   skipped: load(SKIP_KEY, {}),
   skip: (id) => {
@@ -190,6 +193,27 @@ export const useGame = create<State>((set, get) => ({
 }));
 
 export const avatarFor = (sex: "f" | "m") => PLAYER_AVATARS[sex];
+
+/**
+ * Back again: log in with your key card code or the email you checked in with. Brings back your
+ * name, your key card and everything you chose. Returns an error message, or null when you're in.
+ */
+export async function logBackIn(code: string): Promise<string | null> {
+  try {
+    const res = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return (data as { error?: string }).error || "Couldn't log you in. Try again.";
+    const st = useGame.getState();
+    st.checkIn({ ...(data as Me), at: Date.now() });
+    st.setGuestName((data as Me).first);
+    if ((data as Me).sex) st.setSex((data as Me).sex!);
+    await st.refresh();
+    await st.restore();
+    return null;
+  } catch {
+    return "No connection. Try again in a moment.";
+  }
+}
 
 /** POST to the API as this browser's key card holder. */
 export async function post<T = unknown>(path: string, body: Record<string, unknown>): Promise<T> {

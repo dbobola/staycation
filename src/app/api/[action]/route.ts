@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { rows, save } from "@/server/storage";
 import { AWARDS, GAMES, MOVIES } from "@/game/data/activities";
@@ -10,6 +10,7 @@ import { crowdName, isFor } from "@/game/data/roommates";
 // One small API for the whole resort:
 //   GET  /api/state      everything people have shared (no emails, phones or key cards)
 //   POST /api/checkin    check in: get your key card
+//   POST /api/login      back again: your key card (or the email you checked in with) → you (nothing is saved)
 //   POST /api/order      your meal for one slot
 //   POST /api/movie      your movie-night vote
 //   POST /api/games      the games you're joining
@@ -18,6 +19,8 @@ import { crowdName, isFor } from "@/game/data/roommates";
 //   POST /api/decline    say no to someone's room-partner request
 //   POST /api/mine       your own choices so far (to show them again on another phone)
 //   POST /api/suggest    suggest a movie, a dish or drink, a game or an award: it joins the list
+//   POST /api/admin      the organisers' view: everyone, emails, key cards, meals, votes, games,
+//                        nominations, room partners (needs the admin password; reads only)
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +130,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
     return NextResponse.json({ ...row, again: !!again });
   }
 
+  if (action === "admin") {
+    if (!isAdmin(body.key)) return bad("Wrong password.", 401);
+    return NextResponse.json(await adminView());
+  }
+
+  if (action === "login") {
+    // by key card ("SD-ABC123", any case, with or without the dash) or by the email you used
+    const raw = clean(body.code, 120);
+    const card = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const email = raw.toLowerCase();
+    const all = await people();
+    const p = all.find((x) => x.card.replace(/[^A-Z0-9]/g, "") === card || (x.card.replace(/[^A-Z0-9]/g, "") === `${EVENT.cardPrefix}${card}`) || (!!x.email && x.email === email));
+    if (!raw || !p) return bad("We couldn't find that key card or email. Check it, or check in as new.", 404);
+    const { phone: _phone, ...row } = p;
+    void _phone;
+    return NextResponse.json({ ...row, again: true });
+  }
+
   const me = await whoIs(body.card, body.by);
   if (!me) return bad("Check in at the gate first: your key card isn't on this device.", 401);
 
@@ -206,4 +227,67 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
   } else return bad("Not found", 404);
 
   return NextResponse.json(await state());
+}
+
+// ---------------------------------------------------------------------------------------------
+// The organisers' view. Reads everything and changes nothing.
+
+/** The admin password's SHA-256 (ADMIN_KEY in the site's environment, if set, is used instead). */
+const ADMIN_HASH = "abe1088f1664e294674f72644f34bb7fd246adda9d61cde31e1153650d19c4b4";
+
+function isAdmin(key: unknown) {
+  if (typeof key !== "string" || !key) return false;
+  const want = process.env.ADMIN_KEY ? createHash("sha256").update(process.env.ADMIN_KEY).digest() : Buffer.from(ADMIN_HASH, "hex");
+  const got = createHash("sha256").update(key).digest();
+  return want.length === got.length && timingSafeEqual(want, got);
+}
+
+async function adminView() {
+  const all = await people();
+  const sugg = await suggestions();
+  const nameOf = (id: string) => {
+    const p = all.find((x) => x.id === id);
+    return p ? `${p.first} ${p.last ?? ""}`.trim() : id.startsWith("name:") ? `${id.slice(5)} (not checked in)` : id;
+  };
+  const label = (kind: Suggestion["kind"], id: string) =>
+    (kind === "movie" ? MOVIES.find((m) => m.id === id)?.title : kind === "game" ? GAMES.find((g) => g.id === id)?.name : kind === "award" ? AWARDS.find((a) => a.id === id)?.title : DISHES.get(id)?.name) ??
+    sugg.find((x) => x.id === id)?.text ??
+    id;
+  const firstSeen = new Map<string, string>();
+  for (const r of await rows("people")) if (!firstSeen.has(String(r.card))) firstSeen.set(String(r.card), String(r.created_at ?? ""));
+
+  const guests = all.map((p) => ({ name: `${p.first} ${p.last ?? ""}`.trim(), email: p.email ?? "", card: p.card, sex: p.sex === "m" ? "Guy" : "Lady", checkedIn: firstSeen.get(p.card) ?? "", id: p.id }));
+
+  const slots = mealSlots(EVENT.nights);
+  const meals = (await latest("orders", (r) => String(r.slot))).map((o) => {
+    const dishes = Object.entries(o)
+      .filter(([k]) => !["slot", "by", "name", "notes", "created_at"].includes(k))
+      .map(([course, id]) => `${course}: ${label("dish", String(id))}`);
+    return { name: nameOf(String(o.by)), meal: slots.find((s) => s.id === o.slot)?.label ?? String(o.slot), dishes: dishes.join("; "), notes: String(o.notes ?? ""), at: String(o.created_at ?? "") };
+  });
+
+  const movies = (await latest("votes", () => "movie")).map((v) => ({ name: nameOf(String(v.by)), movie: label("movie", String(v.movie)), at: String(v.created_at ?? "") }));
+  const games = (await latest("games", () => "games")).map((g) => ({ name: nameOf(String(g.by)), games: ((g.games as string[]) ?? []).map((id) => label("game", id)).join(", "), at: String(g.created_at ?? "") }));
+  const awards = (await latest("awards", (r) => String(r.award))).map((a) => ({ name: nameOf(String(a.by)), award: label("award", String(a.award)), nominee: nameOf(String(a.nominee)), at: String(a.created_at ?? "") }));
+
+  const reqs = (await latest("roommates", () => "room")).filter((r) => r.to).map((r) => ({ from: String(r.by), to: String(r.to), at: String(r.created_at ?? "") }));
+  const personOf = (id: string) => all.find((p) => p.id === id);
+  const declined = (await latest("declines", (r) => String(r.from))).filter((d) => d.no);
+  const roommates = reqs.map((r) => {
+    const a = personOf(r.from);
+    const back = a && reqs.find((x) => x.from !== r.from && personOf(x.from) && isFor(r.to, personOf(x.from)!) && isFor(x.to, a));
+    const no = declined.find((d) => d.from === r.from && personOf(String(d.by)) && isFor(r.to, personOf(String(d.by))!));
+    return { from: nameOf(r.from), to: back ? nameOf(back.from) : nameOf(r.to), status: back ? "Matched 🤝" : no ? "Declined" : "Waiting", at: r.at };
+  });
+
+  return {
+    guests,
+    meals,
+    movies,
+    games,
+    awards,
+    roommates,
+    suggestions: sugg.map((x) => ({ kind: x.kind, text: x.text, by: x.name })),
+    event: { name: EVENT.name, dates: EVENT.dates, checkIn: EVENT.checkIn, checkOut: EVENT.checkOut },
+  };
 }

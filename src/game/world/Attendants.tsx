@@ -20,6 +20,8 @@ const STAFF: Outfit = { kind: "staff", shirt: "#0e7c86", trousers: "#1d2a30" };
 
 /** How far each member of staff is from you (only the nearest one talks). */
 const distances = new Map<string, number>();
+/** Who has their card up right now (one at a time). */
+let talker: string | null = null;
 
 const turn = (a: number, b: number, k: number) => {
   let d = b - a;
@@ -60,6 +62,15 @@ function Staff({ a }: { a: Attendant }) {
     for (const [n, other] of distances) if (n !== a.name && other < d) nearest = false;
     const isNear = d < 5 && nearest;
     if (isNear !== near) setNear(isNear);
+    // only one card at a time: while this one's up, the host doesn't talk over it
+    const talking = isNear && !st.done[a.spot] && st.phase === "walk";
+    if (talking && talker !== a.name) {
+      talker = a.name;
+      st.set({ staffTalking: true });
+    } else if (!talking && talker === a.name) {
+      talker = null;
+      st.set({ staffTalking: false });
+    }
   });
   return (
     <group position={[a.x, y, a.z]}>

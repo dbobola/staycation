@@ -97,6 +97,7 @@ function Host() {
   const av = useRef<AvatarHandle>(null);
   const tag = useRef<THREE.Group>(null);
   const me = useRef({ x: player.x + 1.5, z: player.z + 1.5, heading: 0, y: 0 });
+  const staffTalking = useGame((s) => s.staffTalking);
   const [talk, setTalk] = useState(true);
   // say something new each time the next step changes
   const shown = useRef<string | null>(null);
@@ -163,7 +164,7 @@ function Host() {
       <Suspense fallback={null}>
         <Avatar ref={av} avatarId={onThisDevice("f05", Q.models)} outfit={HOST} shadows={!LITE} />
       </Suspense>
-      {(!talk || panel || !walking) && (
+      {(!talk || panel || !walking || staffTalking) && (
         <Billboard ref={tag} position-y={2.05}>
           <mesh position-z={-0.01}>
             <planeGeometry args={[1.0, 0.18]} />
@@ -174,7 +175,7 @@ function Host() {
           </Text>
         </Billboard>
       )}
-      {talk && !panel && walking && (
+      {talk && !panel && walking && !staffTalking && (
         <Html position={[0, 2.35, 0]} center zIndexRange={[14, 4]}>
           <div className="staff-bubble">
             <div className="staff-name">Tolu · Your host</div>

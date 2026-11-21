@@ -16,10 +16,52 @@ export function sameName(a: string, b: string) {
   return x === y || x.split(" ")[0] === y.split(" ")[0];
 }
 
-/** Does a request's `to` mean this person (by id, or by their name)? */
+/** Letters only, lower case, doubled letters once ("Khayy" → "khay", "Yhetty❤️" → "yhety"). */
+const loose = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[^a-z ]/g, "")
+    .replace(/(.)\1+/g, "$1")
+    .trim()
+    .replace(/\s+/g, " ");
+
+function edits(a: string, b: string) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+
+/**
+ * The guest-list name someone who checked in most likely is, allowing for how they spelt it
+ * ("Khayy" is Khay, "Yhetty" is Yetty): the one closest name, a letter or two out at most. Never
+ * a guess between two names (Rofiat and Rodiat stay apart): an exact match wins, a tie is nobody.
+ */
+export function guestListName(name: string) {
+  const me = loose(name);
+  if (!me) return null;
+  const first = me.split(" ")[0];
+  const exact = GUEST_NAMES.find((g) => sameName(g.name, name) || loose(g.name) === me);
+  if (exact) return exact.name;
+  const allowed = first.length >= 5 ? 2 : 1;
+  let best: string | null = null, bestD = Infinity, tie = false;
+  for (const g of GUEST_NAMES) {
+    const gl = loose(g.name);
+    const d = Math.min(edits(gl, me), edits(gl.split(" ")[0], first));
+    if (d < bestD) [best, bestD, tie] = [g.name, d, false];
+    else if (d === bestD) tie = true;
+  }
+  return bestD <= allowed && !tie ? best : null;
+}
+
+/** Does a request's `to` mean this person (by id, or by their name on the guest list)? */
 export function isFor(to: string, person: { id: string; first: string; last?: string }) {
   if (to === person.id) return true;
-  return to.startsWith("name:") && sameName(to.slice(5), `${person.first} ${person.last ?? ""}`);
+  if (!to.startsWith("name:")) return false;
+  const full = `${person.first} ${person.last ?? ""}`;
+  return sameName(to.slice(5), full) || guestListName(full) === crowdName(to.slice(5));
 }
 
 /** A crowd name, if it's one of ours (as it's spelt in the list). */
