@@ -24,7 +24,8 @@ import { deviceKey, rightKey, sameWords, wordsFor } from "@/server/words";
 //   POST /api/mine       your own choices so far (to show them again on another phone)
 //   POST /api/suggest    suggest a movie, a dish or drink, a game or an award: it joins the list
 //   POST /api/admin      the organisers' view: everyone, emails, key cards, meals, votes, games,
-//                        nominations, room partners (needs the admin password; reads only)
+//                        nominations, room partners, history (needs the admin password). Reads
+//                        only, except `cancelRoommate: <id>` cancels that person's room request
 
 export const dynamic = "force-dynamic";
 
@@ -160,6 +161,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
 
   if (action === "admin") {
     if (!isAdmin(body.key)) return bad("Wrong password.", 401);
+    // organisers can cancel someone's room partner request (the request stays in History)
+    if (typeof body.cancelRoommate === "string") {
+      const p = (await people()).find((x) => x.id === body.cancelRoommate);
+      if (!p) return bad("No one checked in with that id.", 404);
+      await save("roommates", { by: p.id, to: "", byOrganisers: true });
+    }
     return NextResponse.json(await adminView());
   }
 
@@ -329,7 +336,7 @@ async function adminView() {
     seenCard.add(card);
   }
   for (const r of await rows("roommates"))
-    history.push({ at: at(r), who: nameOf(String(r.by)), what: r.to ? "Room partner request" : "Cancelled room partner request", detail: r.to ? `→ ${nameOf(String(r.to))}` : "" });
+    history.push({ at: at(r), who: nameOf(String(r.by)), what: r.to ? "Room partner request" : "Cancelled room partner request", detail: r.to ? `→ ${nameOf(String(r.to))}` : r.byOrganisers ? "by the organisers" : "" });
   // (a "no: false" entry is written automatically with every request, so only real declines show)
   for (const r of await rows("declines"))
     if (r.no) history.push({ at: at(r), who: nameOf(String(r.by)), what: "Declined request", detail: `from ${nameOf(String(r.from))}` });
