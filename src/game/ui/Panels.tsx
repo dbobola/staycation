@@ -327,6 +327,16 @@ function CheckIn() {
   const [listName, setListName] = useState<string | null | undefined>(me ? (me.listName ?? null) : undefined);
   const [q, setQ] = useState(() => (me ? "" : useGame.getState().guestName));
   const [fresh, setFresh] = useState(false);
+  // logged back in from this panel: show the key card, not the form
+  const meId = me?.id;
+  useEffect(() => {
+    const cur = useGame.getState().me;
+    if (!cur) return;
+    setEditing(false);
+    setListName(cur.listName ?? null);
+    setName(`${cur.first} ${cur.last}`.trim());
+    setEmail(cur.email ?? "");
+  }, [meId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
