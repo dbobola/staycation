@@ -5,12 +5,14 @@ import { AWARDS, GAMES, MOVIES } from "@/game/data/activities";
 import { DISHES, mealSlots } from "@/game/data/menu";
 import { EVENT, SAMPLES_UNTIL } from "@/game/data/event";
 import { SAMPLE_PEOPLE, type Person } from "@/game/data/samples";
-import { crowdName, isFor } from "@/game/data/roommates";
+import { claimedBy, crowdName, isFor } from "@/game/data/roommates";
+import { sameWords, wordsFor } from "@/server/words";
 
 // One small API for the whole resort:
 //   GET  /api/state      everything people have shared (no emails, phones or key cards)
 //   POST /api/checkin    check in: get your key card
-//   POST /api/login      back again: your key card (or the email you checked in with) → you (nothing is saved)
+//   POST /api/login      back again: who you are + your three code words → you (nothing is saved)
+//   POST /api/words      your code words (shown on your key card, to screenshot)
 //   POST /api/order      your meal for one slot
 //   POST /api/movie      your movie-night vote
 //   POST /api/games      the games you're joining
@@ -29,10 +31,21 @@ const clean = (v: unknown, max = 120) => (typeof v === "string" ? v.trim().repla
 
 type PersonRow = Person & { card: string; email?: string; phone?: string };
 
+/**
+ * Check-ins the organisers took off (kept in storage, just left out everywhere):
+ * SD-SGZQ5N was a second "Bobo" with a mistyped email (bobniches@gmail.copm) that never did anything.
+ */
+const REMOVED = new Set(["SD-SGZQ5N"]);
+
+/** Every check-in row, the removed ones left out. */
+async function checkIns() {
+  return (await rows("people")).filter((r) => !REMOVED.has(String(r.card)));
+}
+
 /** The latest check-in per key card. */
 async function people(): Promise<PersonRow[]> {
   const byCard = new Map<string, PersonRow>();
-  for (const r of await rows("people")) byCard.set(String(r.card), r as unknown as PersonRow);
+  for (const r of await checkIns()) byCard.set(String(r.card), r as unknown as PersonRow);
   return [...byCard.values()];
 }
 
@@ -75,7 +88,7 @@ async function newCard(taken: Set<string>) {
 
 async function state() {
   const real = await people();
-  const pub: Person[] = real.map(({ id, first, last, nickname, set, house, quote, sex }) => ({ id, first, last, nickname, set, house, quote, sex }));
+  const pub: Person[] = real.map(({ id, first, last, nickname, set, house, quote, sex, listName }) => ({ id, first, last, nickname, set, house, quote, sex, listName }));
   const everyone = real.length < SAMPLES_UNTIL ? [...pub, ...SAMPLE_PEOPLE] : pub;
   const name = (id: string) => {
     const p = everyone.find((x) => x.id === id);
@@ -115,19 +128,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
   if (!body) return bad("Send the form as JSON.");
 
   if (action === "checkin") {
-    // just a name (what you'd like to be called) and an email
+    // your name on the organisers' list (if you're on it), what you'd like to be called, and an email
     const name = clean(body.name ?? `${clean(body.first, 40)} ${clean(body.last, 40)}`, 40);
     const email = clean(body.email, 120).toLowerCase();
     if (!name) return bad("Please tell us what you'd like to be called.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad("That email doesn't look right.");
+    const listName = typeof body.listName === "string" && body.listName ? crowdName(body.listName) : null;
+    if (body.listName && !listName) return bad("We can't find that name on the list.");
     const all = await people();
-    // checking in again from a new device: the same email gets the same key card back
-    const again = all.find((p) => p.email === email);
-    const card = again?.card ?? (await newCard(new Set(all.map((p) => p.card))));
-    const id = again?.id ?? `p-${card.slice(-6).toLowerCase()}`;
-    const row: PersonRow = { id, card, first: name, last: "", sex: body.sex === "m" ? "m" : "f", email };
+    // this phone's own check-in (changing your name or email) keeps its key card
+    const own = typeof body.card === "string" && typeof body.by === "string" ? all.find((p) => p.card === body.card && p.id === body.by) : undefined;
+    const removed = (await rows("people")).some((r) => REMOVED.has(String(r.card)) && (r.card === body.card || r.email === email));
+    if (removed && !own) return bad("This check-in was removed by the organisers. Check in with your own name and email.", 409);
+    const sameEmail = all.find((p) => p.email === email && p !== own);
+    if (sameEmail)
+      return bad(`"${`${sameEmail.first} ${sameEmail.last}`.trim()}" already checked in with this email. If that's you, tap "Log back in" and use your code words.`, 409);
+    const keep = listName ?? (own ? own.listName : undefined);
+    const taken = keep ? claimedBy(keep, all.filter((p) => p !== own)) : undefined;
+    if (taken)
+      return bad(`${keep} is already checked in (as "${`${taken.first} ${taken.last}`.trim()}"). If that's you, tap "Log back in" and use your code words.`, 409);
+    const card = own?.card ?? (await newCard(new Set((await rows("people")).map((p) => String(p.card)))));
+    // a fresh id, not taken from the key card, so the key card can't be worked out from the app
+    const id = own?.id ?? `p-${randomInt(36 ** 8).toString(36)}`;
+    const row: PersonRow = { id, card, first: name, last: "", sex: body.sex === "m" ? "m" : "f", email, ...(keep ? { listName: keep } : {}) };
     await save("people", row);
-    return NextResponse.json({ ...row, again: !!again });
+    return NextResponse.json({ ...row, words: await wordsFor(card), again: false });
   }
 
   if (action === "admin") {
@@ -136,17 +161,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
   }
 
   if (action === "login") {
-    // by key card ("SD-ABC123", any case, with or without the dash) or by the email you used
-    const raw = clean(body.code, 120);
-    const card = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const email = raw.toLowerCase();
-    const all = await people();
-    const p = all.find((x) => x.card.replace(/[^A-Z0-9]/g, "") === card || (x.card.replace(/[^A-Z0-9]/g, "") === `${EVENT.cardPrefix}${card}`) || (!!x.email && x.email === email));
-    if (!raw || !p) return bad("We couldn't find that key card or email. Check it, or check in as new.", 404);
+    // you pick yourself from everyone who's checked in, then type your three code words
+    const p = (await people()).find((x) => x.id === body.id);
+    if (!p) return bad("Pick your name from the list first.");
+    const words = await wordsFor(p.card);
+    if (!sameWords(body.words, words)) return bad("Those code words don't match. Check your screenshot, or ask an organiser.", 401);
     const { phone: _phone, ...row } = p;
     void _phone;
-    return NextResponse.json({ ...row, again: true });
+    return NextResponse.json({ ...row, words, again: true });
   }
+
 
   const me = await whoIs(body.card, body.by);
   if (!me) return bad("Check in at the gate first: your key card isn't on this device.", 401);
@@ -202,6 +226,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
   } else if (action === "decline") {
     if (typeof body.from !== "string" || !body.from) return bad("Whose request?");
     await save("declines", { by: me.id, from: body.from, no: true });
+  } else if (action === "words") {
+    return NextResponse.json({ words: await wordsFor(me.card) });
   } else if (action === "mine") {
     // your latest answer to everything (so a new phone shows your choices again)
     const meals: Record<string, Record<string, string>> = {};
@@ -254,9 +280,9 @@ async function adminView() {
     sugg.find((x) => x.id === id)?.text ??
     id;
   const firstSeen = new Map<string, string>();
-  for (const r of await rows("people")) if (!firstSeen.has(String(r.card))) firstSeen.set(String(r.card), String(r.created_at ?? ""));
+  for (const r of await checkIns()) if (!firstSeen.has(String(r.card))) firstSeen.set(String(r.card), String(r.created_at ?? ""));
 
-  const guests = all.map((p) => ({ name: `${p.first} ${p.last ?? ""}`.trim(), email: p.email ?? "", card: p.card, sex: p.sex === "m" ? "Guy" : "Lady", checkedIn: firstSeen.get(p.card) ?? "", id: p.id }));
+  const guests = await Promise.all(all.map(async (p) => ({ name: `${p.first} ${p.last ?? ""}`.trim(), listName: p.listName ?? "", email: p.email ?? "", card: p.card, words: await wordsFor(p.card), sex: p.sex === "m" ? "Guy" : "Lady", checkedIn: firstSeen.get(p.card) ?? "", id: p.id })));
 
   const slots = mealSlots(EVENT.nights);
   const meals = (await latest("orders", (r) => String(r.slot))).map((o) => {
@@ -285,9 +311,9 @@ async function adminView() {
   const at = (r: Record<string, unknown>) => String(r.created_at ?? "");
   const history: { at: string; who: string; what: string; detail: string }[] = [];
   const seenCard = new Set<string>();
-  for (const r of await rows("people")) {
+  for (const r of await checkIns()) {
     const card = String(r.card);
-    history.push({ at: at(r), who: nameOf(String(r.id)), what: seenCard.has(card) ? "Checked in again" : "Checked in", detail: `as "${`${String(r.first ?? "")} ${String(r.last ?? "")}`.trim()}" · ${card} · ${r.sex === "m" ? "Guy" : "Lady"}` });
+    history.push({ at: at(r), who: nameOf(String(r.id)), what: seenCard.has(card) ? "Checked in again" : "Checked in", detail: `as "${`${String(r.first ?? "")} ${String(r.last ?? "")}`.trim()}"${r.listName ? ` (${String(r.listName)} on the list)` : ""} · ${card} · ${r.sex === "m" ? "Guy" : "Lady"}` });
     seenCard.add(card);
   }
   for (const r of await rows("roommates"))

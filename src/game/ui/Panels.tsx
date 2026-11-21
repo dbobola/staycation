@@ -6,7 +6,7 @@ import { COURSES, mealSlots } from "../data/menu";
 import type { Person } from "../data/samples";
 import { GUEST_NAMES } from "../data/guests";
 import { allAwards, allGames, allMovies, dishName, dishesFor } from "../data/choices";
-import { isFor, sameName } from "../data/roommates";
+import { claimedBy, guestListName, isFor, listNameOf, sameName } from "../data/roommates";
 import { logBackIn, post, useGame, type Me, type Shared } from "../store";
 import type { SpotId } from "../world/layout";
 
@@ -181,37 +181,119 @@ function Avatar({ p, size = 44 }: { p: Person; size?: number }) {
 
 // ---------------------------------------------------------------------------------------------
 
-/** Already checked in (another phone, cleared browser)? Your key card code or email brings you back. */
-function LogBackIn() {
-  const [open, setOpen] = useState(false);
-  const [code, setCode] = useState("");
+/** Loose letters for searching ("Yhetty❤️" → "yhetty"). */
+const letters = (s: string) => s.toLowerCase().normalize("NFD").replace(/[^a-z ]/g, "").trim();
+
+/**
+ * Already checked in (another phone, cleared browser)? Find your name among everyone who's checked
+ * in, type your three code words, and you're back with everything you chose.
+ */
+export function FindMe({ onIn }: { onIn: () => void }) {
+  const people = useGame((s) => s.shared.people);
+  const [q, setQ] = useState("");
+  const [who, setWho] = useState<Person | null>(null);
+  const [words, setWords] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void useGame.getState().refresh();
+  }, []);
+  const k = letters(q);
+  const here = people
+    .filter((p) => !p.sample)
+    .filter((p) => !k || letters(fullName(p)).includes(k) || letters(listNameOf(p) ?? "").includes(k))
+    .sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!who) return;
+    setBusy(true);
+    setErr("");
+    const problem = await logBackIn(who.id, words);
+    setBusy(false);
+    if (problem) return setErr(problem);
+    onIn();
+  };
+  if (who)
+    return (
+      <form onSubmit={go}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-bold text-white">{fullName(who)}</div>
+          <button type="button" className="text-[12px] text-white/60 underline" onClick={() => (setWho(null), setErr(""), setWords(""))}>
+            Not me
+          </button>
+        </div>
+        <label className="mt-2 block">
+          <span className="label">Your 3 code words (from your screenshot)</span>
+          <input className="input text-base" value={words} onChange={(e) => setWords(e.target.value)} placeholder="e.g. dog cart fish" autoCapitalize="none" autoCorrect="off" autoFocus required />
+        </label>
+        {err && <p className="mt-2 text-[13px] text-[#ff9b7a]">{err}</p>}
+        <button className="btn mt-2 w-full py-2.5" type="submit" disabled={busy || words.trim().split(/\s+/).length < 3}>
+          {busy ? "Checking…" : "Log me in 🔑"}
+        </button>
+        <p className="mt-2 text-[11px] text-white/50">Lost your code words? An organiser can look them up for you.</p>
+      </form>
+    );
+  return (
+    <div>
+      <input className="input text-base" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your name" autoCapitalize="words" autoFocus />
+      <div className="mt-2 max-h-56 space-y-1 overflow-y-auto">
+        {here.map((p) => {
+          const list = listNameOf(p);
+          return (
+            <button key={p.id} type="button" className="flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-left hover:bg-white/10" onClick={() => setWho(p)}>
+              <span className="font-bold text-white">{fullName(p)}</span>
+              {list && letters(list) !== letters(fullName(p)) && <span className="text-[11px] text-white/50">{list} on the list</span>}
+            </button>
+          );
+        })}
+        {!here.length && <p className="px-1 py-2 text-[13px] text-white/55">{people.some((p) => !p.sample) ? "Nobody by that name has checked in yet." : "Loading…"}</p>}
+      </div>
+    </div>
+  );
+}
+
+function LogBackIn() {
+  const [open, setOpen] = useState(false);
   if (!open)
     return (
       <button className="mt-3 w-full text-[12px] text-white/60 underline" onClick={() => setOpen(true)}>
         Already checked in? Log back in
       </button>
     );
-  const go = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setErr("");
-    const problem = await logBackIn(code.trim());
-    setBusy(false);
-    if (problem) return setErr(problem);
-    useGame.getState().say(`Welcome back, ${useGame.getState().me?.first}! Everything you chose is still here 🔑`);
-    checkedIn();
-  };
   return (
-    <form onSubmit={go} className="card mt-4 p-3">
-      <div className="eyebrow">Log back in</div>
-      <input className="input mt-2 text-base" value={code} onChange={(e) => setCode(e.target.value)} placeholder="SD-ABC123 or you@email.com" autoCapitalize="none" required />
-      {err && <p className="mt-2 text-[13px] text-[#ff9b7a]">{err}</p>}
-      <button className="btn mt-2 w-full py-2.5" type="submit" disabled={busy || !code.trim()}>
-        {busy ? "Finding you…" : "Log me in 🔑"}
-      </button>
-    </form>
+    <div className="card mt-4 p-3">
+      <div className="eyebrow mb-2">Log back in</div>
+      <FindMe
+        onIn={() => {
+          useGame.getState().say(`Welcome back, ${useGame.getState().me?.first}! Everything you chose is still here 🔑`);
+          checkedIn();
+        }}
+      />
+    </div>
+  );
+}
+
+/** Your three code words, big, with a reminder to screenshot them. */
+function CodeWords() {
+  const me = useGame((s) => s.me);
+  useEffect(() => {
+    if (!me || me.words) return;
+    // checked in before code words existed: fetch yours once
+    post<{ words: string }>("/api/words", {})
+      .then(({ words }) => {
+        const cur = useGame.getState().me;
+        if (cur) useGame.getState().checkIn({ ...cur, words });
+      })
+      .catch(() => {});
+  }, [me]);
+  if (!me?.words) return null;
+  return (
+    <div className="mt-3 rounded-xl border-2 border-dashed border-[var(--sun)] bg-[var(--sun)]/10 p-4 text-center">
+      <div className="eyebrow">Your code words</div>
+      <div className="mt-1 font-mono text-2xl font-bold tracking-wide text-white">{me.words.split(" ").join(" · ")}</div>
+      <p className="mt-2 text-[13px] font-bold text-[var(--sun)]">📸 Screenshot this now!</p>
+      <p className="mt-0.5 text-[12px] text-white/65">You need your name and these 3 words to log back in on another phone. There&apos;s no password.</p>
+    </div>
   );
 }
 
@@ -240,16 +322,22 @@ function CheckIn() {
   const [email, setEmail] = useState(me?.email ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const people = useGame((s) => s.shared.people);
+  // step one for someone new: find yourself on the organisers' list (or say you're not on it)
+  const [listName, setListName] = useState<string | null | undefined>(me ? (me.listName ?? null) : undefined);
+  const [q, setQ] = useState(() => (me ? "" : useGame.getState().guestName));
+  const [fresh, setFresh] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setBusy(true);
     try {
-      const res = await fetch("/api/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, sex }) });
+      const res = await fetch("/api/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, sex, listName: listName ?? undefined, card: me?.card, by: me?.id }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Couldn't check you in. Try again.");
       const next: Me = { ...(data as Me), at: Date.now() };
+      if (!me) setFresh(true);
       useGame.getState().checkIn(next);
       useGame.getState().setGuestName(next.first);
       await useGame.getState().refresh();
@@ -295,8 +383,9 @@ function CheckIn() {
             <div className="text-4xl">🔑</div>
           </div>
         </div>
+        <CodeWords />
         <Stay />
-        <p className="mt-3 text-white/70">That&apos;s it, you&apos;re in! Checking in again with the same email on another phone gives you the same card.</p>
+        <p className="mt-3 text-white/70">{fresh ? "That's it, you're in! " : ""}On another phone, tap &ldquo;Log back in&rdquo;, find your name and type your code words.</p>
         <button className="btn mt-4 w-full py-3" onClick={() => set({ panel: null, focus: null })}>
           Let&apos;s go 🌴
         </button>
@@ -306,12 +395,64 @@ function CheckIn() {
       </Shell>
     );
 
+  // someone new who hasn't found themselves on the list yet
+  if (!me && listName === undefined) {
+    const k = letters(q);
+    const guess = guestListName(q);
+    const matches = GUEST_NAMES.filter((g) => !k || letters(g.name).includes(k) || g.name === guess).sort((a, b) => a.name.localeCompare(b.name));
+    const here = people.filter((p) => !p.sample);
+    return (
+      <Shell kicker="Welcome desk" title="Get your key card">
+        <p className="text-white/70">First, find your name on the guest list.</p>
+        <input className="input mt-3 text-base" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your name" autoCapitalize="words" autoFocus />
+        <div className="mt-2 max-h-64 space-y-1 overflow-y-auto">
+          {matches.map((g) => {
+            const taken = claimedBy(g.name, here);
+            return (
+              <button
+                key={g.name}
+                type="button"
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ${taken ? "bg-white/[0.03] text-white/45" : "bg-white/5 hover:bg-white/10"}`}
+                onClick={() => {
+                  if (taken) return setError(`${g.name} is already checked in (as "${fullName(taken)}"). If that's you, log back in below with your code words.`);
+                  setError("");
+                  setListName(g.name);
+                  if (!name.trim() || letters(name) === k) setName(g.name);
+                }}
+              >
+                <span className={taken ? "" : "font-bold text-white"}>{g.name}</span>
+                {taken && <span className="text-[11px]">checked in{letters(fullName(taken)) !== letters(g.name) ? ` as ${fullName(taken)}` : ""}</span>}
+              </button>
+            );
+          })}
+          {!matches.length && <p className="px-1 py-2 text-[13px] text-white/55">No one by that name on the list.</p>}
+        </div>
+        {error && <p className="mt-2 text-[13px] text-[#ff9b7a]">{error}</p>}
+        <button className="mt-3 w-full text-[12px] text-white/60 underline" onClick={() => (setListName(null), setError(""), setName(q.trim() || name))}>
+          I&apos;m not on the list
+        </button>
+        <LogBackIn />
+      </Shell>
+    );
+  }
+
   return (
     <Shell kicker="Welcome desk" title="Get your key card">
-      <p className="text-white/70">Just two things and you&apos;re in.</p>
+      {listName ? (
+        <p className="text-white/70">
+          On the list as <b className="text-white">{listName}</b>.{" "}
+          {!me && (
+            <button className="text-[12px] text-white/60 underline" onClick={() => setListName(undefined)}>
+              Not you?
+            </button>
+          )}
+        </p>
+      ) : (
+        <p className="text-white/70">Just two things and you&apos;re in.</p>
+      )}
       <Stay />
       <form onSubmit={submit} className="mt-4 space-y-3">
-        <Field label="What would you like to be called?">
+        <Field label={listName ? "What would you like to be called? (change it if you go by another name)" : "What would you like to be called?"}>
           <input className="input text-base" required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={40} />
         </Field>
         <Field label="Your email">
@@ -463,7 +604,7 @@ function Roommate() {
   const registered = shared.people.filter((p) => !p.sample && p.id !== me?.id);
   const myName = me ? `${me.first} ${me.last}` : guestName;
   // the crowd: everyone on the list who hasn't checked in (and isn't you); matched by full name
-  const crowd = GUEST_NAMES.filter((g) => !registered.some((p) => fullName(p).toLowerCase() === g.name.toLowerCase()) && !(myName && sameName(g.name, myName)));
+  const crowd = GUEST_NAMES.filter((g) => !claimedBy(g.name, registered) && !(me ? listNameOf(me) === g.name : myName && sameName(g.name, myName)));
   const k = q.trim().toLowerCase();
   const options = [
     ...registered.map((p) => ({ key: p.id, name: fullName(p), here: true, p })),

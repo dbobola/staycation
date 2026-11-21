@@ -8,7 +8,7 @@ import type { SpotId } from "./world/layout";
 export type Phase = "loading" | "intro" | "arrive" | "setup" | "celebrate" | "aerial" | "walk";
 
 /** This browser's check-in (kept on the device: your key card for everything else). */
-export type Me = Person & { card: string; email?: string; phone?: string; at: number };
+export type Me = Person & { card: string; email?: string; phone?: string; at: number; /** your three code words (to log back in) */ words?: string };
 
 /** What everyone has shared so far (from /api/state). */
 export type Shared = {
@@ -195,12 +195,12 @@ export const useGame = create<State>((set, get) => ({
 export const avatarFor = (sex: "f" | "m") => PLAYER_AVATARS[sex];
 
 /**
- * Back again: log in with your key card code or the email you checked in with. Brings back your
- * name, your key card and everything you chose. Returns an error message, or null when you're in.
+ * Back again: pick yourself from everyone who's checked in and type your three code words. Brings
+ * back your name, your key card and everything you chose. Returns an error message, or null when you're in.
  */
-export async function logBackIn(code: string): Promise<string | null> {
+export async function logBackIn(id: string, words: string): Promise<string | null> {
   try {
-    const res = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+    const res = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, words }) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return (data as { error?: string }).error || "Couldn't log you in. Try again.";
     const st = useGame.getState();

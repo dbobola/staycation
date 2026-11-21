@@ -9,7 +9,7 @@ import { getStore } from "@netlify/blobs";
 //  - anywhere else (local development): .data/<table>.jsonl
 // Every write is a new entry; readers take the latest entry per person where that matters.
 
-export type Table = "people" | "orders" | "votes" | "games" | "awards" | "roommates" | "declines" | "suggestions";
+export type Table = "people" | "orders" | "votes" | "games" | "awards" | "roommates" | "declines" | "suggestions" | "secrets";
 
 function blobs() {
   try {

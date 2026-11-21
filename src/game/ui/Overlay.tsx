@@ -4,8 +4,8 @@ import { useProgress } from "@react-three/drei";
 import { useEffect, useRef, useState } from "react";
 import { EVENT } from "../data/event";
 import { fireAction, input } from "../input";
-import { logBackIn, post, useGame, type Shared } from "../store";
-import { TrailerPlayer, useRoommates } from "./Panels";
+import { post, useGame, type Shared } from "../store";
+import { FindMe, TrailerPlayer, useRoommates } from "./Panels";
 import { isFor } from "../data/roommates";
 import { allMovies } from "../data/choices";
 import { trailerRect } from "../world/Trailer";
@@ -61,9 +61,6 @@ function Setup() {
   const [name, setName] = useState(me?.first || saved);
   const [pick, setPick] = useState<"f" | "m">(sex);
   const [back, setBack] = useState(false);
-  const [code, setCode] = useState("");
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
   const step = (n: string, again = false) => {
     const st = useGame.getState();
     // a new outfit every time you arrive
@@ -75,15 +72,6 @@ function Setup() {
       useGame.getState().set({ phase: "walk" });
       useGame.getState().say(again ? `Welcome back, ${n}! Everything you chose is still here 🔑` : `Enjoy the weekend, ${n}! Check in with Ada at the desk 🔑`);
     }, 4600);
-  };
-  const login = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setErr("");
-    const problem = await logBackIn(code.trim());
-    setBusy(false);
-    if (problem) return setErr(problem);
-    step(useGame.getState().me?.first ?? "", true);
   };
   const go = (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,19 +86,15 @@ function Setup() {
   return (
     <div className="pointer-events-auto fixed inset-x-0 bottom-[var(--badge)] z-30 flex justify-center px-3 pb-2 sm:inset-0 sm:items-center sm:p-3">
       {back ? (
-        <form onSubmit={login} className="panel w-full max-w-sm rounded-2xl p-4 sm:p-5">
+        <div className="panel w-full max-w-sm rounded-2xl p-4 sm:p-5">
           <div className="eyebrow">Welcome back 👋🏾</div>
           <h2 className="title mt-1 text-[22px] leading-tight sm:text-[28px]">Log back in</h2>
-          <p className="mt-0.5 text-[13px] text-white/70">Your key card code (like SD-ABC123) or the email you checked in with.</p>
-          <input className="input mt-3 text-base" value={code} onChange={(e) => setCode(e.target.value)} placeholder="SD-ABC123 or you@email.com" autoComplete="email" autoCapitalize="none" required />
-          {err && <p className="mt-2 text-[13px] text-[#ff9b7a]">{err}</p>}
-          <button className="btn mt-3 w-full py-3 text-base" type="submit" disabled={busy || !code.trim()}>
-            {busy ? "Finding you…" : "Log me in 🔑"}
-          </button>
+          <p className="mb-3 mt-0.5 text-[13px] text-white/70">Find your name, then type the 3 code words you screenshotted.</p>
+          <FindMe onIn={() => step(useGame.getState().me?.first ?? "", true)} />
           <button type="button" className="mt-2 w-full text-[12px] text-white/60 underline" onClick={() => setBack(false)}>
             First time here? Start fresh
           </button>
-        </form>
+        </div>
       ) : (
       <form onSubmit={go} className="panel w-full max-w-sm rounded-2xl p-4 sm:p-5">
         <div className="eyebrow">You&apos;ve arrived 🌴</div>

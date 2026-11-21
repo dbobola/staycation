@@ -56,12 +56,26 @@ export function guestListName(name: string) {
   return bestD <= allowed && !tie ? best : null;
 }
 
+type Who = { id: string; first: string; last?: string; listName?: string };
+
+/** The guest-list name this person is: the one they picked when checking in, or else a guess from how they spelt it. */
+export function listNameOf(person: Who) {
+  return person.listName || guestListName(`${person.first} ${person.last ?? ""}`);
+}
+
 /** Does a request's `to` mean this person (by id, or by their name on the guest list)? */
-export function isFor(to: string, person: { id: string; first: string; last?: string }) {
+export function isFor(to: string, person: Who) {
   if (to === person.id) return true;
   if (!to.startsWith("name:")) return false;
+  const want = crowdName(to.slice(5));
+  if (person.listName) return person.listName === want;
   const full = `${person.first} ${person.last ?? ""}`;
-  return sameName(to.slice(5), full) || guestListName(full) === crowdName(to.slice(5));
+  return sameName(to.slice(5), full) || guestListName(full) === want;
+}
+
+/** Who has already checked in as this guest-list name, if anyone. */
+export function claimedBy<P extends Who>(listName: string, people: P[]) {
+  return people.find((p) => listNameOf(p) === listName);
 }
 
 /** A crowd name, if it's one of ours (as it's spelt in the list). */

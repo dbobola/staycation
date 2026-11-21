@@ -23,7 +23,7 @@ type Data = {
 };
 
 const TABS: { id: keyof Omit<Data, "event">; label: string; cols: [string, string][] }[] = [
-  { id: "guests", label: "Guests", cols: [["name", "Name"], ["email", "Email"], ["card", "Key card"], ["sex", "Lady / Guy"], ["checkedIn", "Checked in"]] },
+  { id: "guests", label: "Guests", cols: [["name", "Name"], ["listName", "On the list as"], ["email", "Email"], ["card", "Key card"], ["words", "Code words"], ["sex", "Lady / Guy"], ["checkedIn", "Checked in"]] },
   { id: "meals", label: "Meals", cols: [["name", "Name"], ["meal", "Meal"], ["dishes", "Order"], ["notes", "Notes"], ["at", "Saved"]] },
   { id: "roommates", label: "Room partners", cols: [["from", "Who"], ["to", "Wants"], ["status", "Status"], ["at", "Saved"]] },
   { id: "movies", label: "Movie votes", cols: [["name", "Name"], ["movie", "Movie"], ["at", "Saved"]] },
@@ -65,8 +65,9 @@ function emailFor(g: Row, e: Data["event"]) {
     `Check out: ${e.checkOut}`,
     ``,
     `Your key card: ${g.card}`,
+    `Your code words: ${g.words}`,
     ``,
-    `To get back in on any phone: open ${site}, tap "Been here before? Log back in" and enter your key card (or this email address).`,
+    `To get back in on any phone: open ${site}, tap "Been here before? Log back in", find your name and type your 3 code words. Keep them private: there's no password.`,
     `Everything you've picked (room partner, meals, movie vote, games) is saved there.`,
     ``,
     `See you at Silver Dome! 🌴`,
@@ -216,7 +217,7 @@ export default function Admin() {
             {rows.map((r, i) => (
               <tr key={i} className="align-top hover:bg-white/5">
                 {t.cols.map(([k]) => (
-                  <td key={k} className={`px-3 py-2 ${k === "card" ? "font-mono" : ""}`}>
+                  <td key={k} className={`px-3 py-2 ${k === "card" || k === "words" ? "font-mono" : ""}`}>
                     {k === "at" || k === "checkedIn" ? when(r[k]) : r[k]}
                   </td>
                 ))}

@@ -10,6 +10,8 @@ export type Person = {
   house?: string;
   quote?: string;
   sex?: "f" | "m";
+  /** Their name on the organisers' list, picked when checking in (they may go by another). */
+  listName?: string;
   sample?: boolean;
 };
 
