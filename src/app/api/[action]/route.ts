@@ -280,6 +280,31 @@ async function adminView() {
     return { from: nameOf(r.from), to: back ? nameOf(back.from) : nameOf(r.to), status: back ? "Matched 🤝" : no ? "Declined" : "Waiting", at: r.at };
   });
 
+  // Every entry ever saved, newest first: nothing is ever overwritten, so this is the full story
+  // (each check-in with the name typed that time, every room request, change, cancel and decline).
+  const at = (r: Record<string, unknown>) => String(r.created_at ?? "");
+  const history: { at: string; who: string; what: string; detail: string }[] = [];
+  const seenCard = new Set<string>();
+  for (const r of await rows("people")) {
+    const card = String(r.card);
+    history.push({ at: at(r), who: nameOf(String(r.id)), what: seenCard.has(card) ? "Checked in again" : "Checked in", detail: `as "${`${String(r.first ?? "")} ${String(r.last ?? "")}`.trim()}" · ${card} · ${r.sex === "m" ? "Guy" : "Lady"}` });
+    seenCard.add(card);
+  }
+  for (const r of await rows("roommates"))
+    history.push({ at: at(r), who: nameOf(String(r.by)), what: r.to ? "Room partner request" : "Cancelled room partner request", detail: r.to ? `→ ${nameOf(String(r.to))}` : "" });
+  // (a "no: false" entry is written automatically with every request, so only real declines show)
+  for (const r of await rows("declines"))
+    if (r.no) history.push({ at: at(r), who: nameOf(String(r.by)), what: "Declined request", detail: `from ${nameOf(String(r.from))}` });
+  for (const r of await rows("orders"))
+    history.push({ at: at(r), who: nameOf(String(r.by)), what: "Meal order", detail: slots.find((s) => s.id === r.slot)?.label ?? String(r.slot) });
+  for (const r of await rows("votes")) history.push({ at: at(r), who: nameOf(String(r.by)), what: "Movie vote", detail: label("movie", String(r.movie)) });
+  for (const r of await rows("games"))
+    history.push({ at: at(r), who: nameOf(String(r.by)), what: "Games", detail: ((r.games as string[]) ?? []).map((id) => label("game", id)).join(", ") });
+  for (const r of await rows("awards"))
+    history.push({ at: at(r), who: nameOf(String(r.by)), what: "Nomination", detail: `${label("award", String(r.award))}: ${nameOf(String(r.nominee))}` });
+  for (const r of await rows("suggestions")) history.push({ at: at(r), who: String(r.name ?? ""), what: "Suggestion", detail: `${String(r.kind)}: ${String(r.text)}` });
+  history.sort((a, b) => b.at.localeCompare(a.at));
+
   return {
     guests,
     meals,
@@ -287,6 +312,7 @@ async function adminView() {
     games,
     awards,
     roommates,
+    history,
     suggestions: sugg.map((x) => ({ kind: x.kind, text: x.text, by: x.name })),
     event: { name: EVENT.name, dates: EVENT.dates, checkIn: EVENT.checkIn, checkOut: EVENT.checkOut },
   };

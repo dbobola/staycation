@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 // partners, votes, games, nominations and suggestions. Read-only: nothing here changes or deletes
 // anything. Each list downloads as a spreadsheet (CSV), and each guest has an "Email" button that
 // opens a ready-written message (their key card and how to log back in) in your own mail app.
+// History lists every entry ever saved (check-ins with the name typed, every request, cancel and
+// decline), newest first, and downloads like the rest.
 
 type Row = Record<string, string>;
 type Data = {
@@ -16,6 +18,7 @@ type Data = {
   awards: Row[];
   roommates: Row[];
   suggestions: Row[];
+  history: Row[];
   event: { name: string; dates: string; checkIn: string; checkOut: string };
 };
 
@@ -27,6 +30,7 @@ const TABS: { id: keyof Omit<Data, "event">; label: string; cols: [string, strin
   { id: "games", label: "Games", cols: [["name", "Name"], ["games", "Games"], ["at", "Saved"]] },
   { id: "awards", label: "Nominations", cols: [["name", "Who"], ["award", "Award"], ["nominee", "Nominee"], ["at", "Saved"]] },
   { id: "suggestions", label: "Suggestions", cols: [["kind", "Kind"], ["text", "Suggestion"], ["by", "By"]] },
+  { id: "history", label: "History", cols: [["at", "When"], ["who", "Who"], ["what", "What"], ["detail", "Details"]] },
 ];
 
 const when = (iso: string) => {
