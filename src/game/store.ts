@@ -8,7 +8,7 @@ import type { SpotId } from "./world/layout";
 export type Phase = "loading" | "intro" | "arrive" | "setup" | "celebrate" | "aerial" | "walk";
 
 /** This browser's check-in (kept on the device: your key card for everything else). */
-export type Me = Person & { card: string; email?: string; phone?: string; at: number; /** your three code words (to log back in) */ words?: string };
+export type Me = Person & { card: string; email?: string; phone?: string; at: number; /** your three code words (to log back in) */ words?: string; /** this phone's secret device key, sent with everything it saves */ key?: string };
 
 /** What everyone has shared so far (from /api/state). */
 export type Shared = {
@@ -222,32 +222,50 @@ export async function post<T = unknown>(path: string, body: Record<string, unkno
     return fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...body, card: me?.card, by: me?.id }),
+      body: JSON.stringify({ ...body, card: me?.card, by: me?.id, key: me?.key }),
     });
   };
   let res = await send();
-  // the server doesn't know this phone's key card (its records were reset, or it was issued
-  // somewhere else): check in again with the same name and email, then try once more
-  if (res.status === 401 && useGame.getState().me && (await checkInAgain())) res = await send();
+  if (res.status === 401 && useGame.getState().me) {
+    // a phone from before device keys gets its key (by its email)
+    if (await ensureKey(true)) res = await send();
+    // still not you: this phone has to log back in with its name and code words
+    if (res.status === 401) {
+      signOut();
+      throw new Error("Please log back in: tap “Log back in”, find your name and type your 3 code words.");
+    }
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error || "Something went wrong. Try again.");
   return data as T;
 }
 
-/** Check in again quietly with the name and email this phone already has. */
-async function checkInAgain() {
+/**
+ * Make sure this phone has its device key. Phones checked in before device keys existed get it
+ * once, by the email they checked in with (kept on the phone, never shown to anyone else).
+ * Returns true when it just got one.
+ */
+export async function ensureKey(force = false) {
   const me = useGame.getState().me;
-  if (!me?.email) return false;
+  if (!me || (me.key && !force) || !me.email) return false;
   try {
-    const res = await fetch("/api/checkin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: `${me.first} ${me.last}`.trim(), email: me.email, sex: me.sex ?? useGame.getState().sex }),
-    });
+    const res = await fetch("/api/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ card: me.card, by: me.id, email: me.email }) });
     if (!res.ok) return false;
-    useGame.getState().checkIn({ ...(await res.json()), at: Date.now() });
+    const { key } = (await res.json()) as { key: string };
+    if (key === me.key) return false;
+    useGame.getState().checkIn({ ...me, key });
     return true;
   } catch {
     return false;
   }
+}
+
+/** Forget this phone's check-in (it has to log back in). */
+function signOut() {
+  try {
+    localStorage.removeItem(ME_KEY);
+  } catch {
+    /* fine */
+  }
+  useGame.setState({ me: null });
 }

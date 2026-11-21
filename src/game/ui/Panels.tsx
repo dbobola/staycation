@@ -7,7 +7,7 @@ import type { Person } from "../data/samples";
 import { GUEST_NAMES } from "../data/guests";
 import { allAwards, allGames, allMovies, dishName, dishesFor } from "../data/choices";
 import { claimedBy, guestListName, isFor, listNameOf, sameName } from "../data/roommates";
-import { logBackIn, post, useGame, type Me, type Shared } from "../store";
+import { ensureKey, logBackIn, post, useGame, type Me, type Shared } from "../store";
 import type { SpotId } from "../world/layout";
 
 // The panels each spot opens: check-in, the Yearbook, room partners, the menu, movie night, games
@@ -331,7 +331,8 @@ function CheckIn() {
   const meId = me?.id;
   useEffect(() => {
     const cur = useGame.getState().me;
-    if (!cur) return;
+    // signed out (this phone has to log back in): start again from the guest-list search
+    if (!cur) return (setEditing(true), setListName(undefined));
     setEditing(false);
     setListName(cur.listName ?? null);
     setName(`${cur.first} ${cur.last}`.trim());
@@ -343,7 +344,9 @@ function CheckIn() {
     setError("");
     setBusy(true);
     try {
-      const res = await fetch("/api/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, sex, listName: listName ?? undefined, card: me?.card, by: me?.id }) });
+      await ensureKey();
+      const cur = useGame.getState().me;
+      const res = await fetch("/api/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, sex, listName: listName ?? undefined, card: cur?.card, by: cur?.id, key: cur?.key }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Couldn't check you in. Try again.");
       const next: Me = { ...(data as Me), at: Date.now() };

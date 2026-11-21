@@ -6,13 +6,15 @@ import { DISHES, mealSlots } from "@/game/data/menu";
 import { EVENT, SAMPLES_UNTIL } from "@/game/data/event";
 import { SAMPLE_PEOPLE, type Person } from "@/game/data/samples";
 import { claimedBy, crowdName, isFor } from "@/game/data/roommates";
-import { sameWords, wordsFor } from "@/server/words";
+import { deviceKey, rightKey, sameWords, wordsFor } from "@/server/words";
 
 // One small API for the whole resort:
 //   GET  /api/state      everything people have shared (no emails, phones or key cards)
 //   POST /api/checkin    check in: get your key card
 //   POST /api/login      back again: who you are + your three code words → you (nothing is saved)
 //   POST /api/words      your code words (shown on your key card, to screenshot)
+//   POST /api/key        a phone checked in before device keys existed gets its key, by its email
+// Everything that saves something needs this phone's key card, id and device key (`key`).
 //   POST /api/order      your meal for one slot
 //   POST /api/movie      your movie-night vote
 //   POST /api/games      the games you're joining
@@ -71,10 +73,11 @@ async function suggestions(): Promise<Suggestion[]> {
 }
 const suggested = async (kind: Suggestion["kind"], id: unknown) => typeof id === "string" && (await suggestions()).some((s) => s.kind === kind && s.id === id);
 
-async function whoIs(card: unknown, by: unknown) {
+/** The person this phone is: its key card and id, proved by the device key only the server can make. */
+async function whoIs(card: unknown, by: unknown, key: unknown) {
   if (typeof card !== "string" || !card) return null;
   const p = (await people()).find((x) => x.card === card);
-  return p && p.id === by ? p : null;
+  return p && p.id === by && (await rightKey(key, p.card)) ? p : null;
 }
 
 async function newCard(taken: Set<string>) {
@@ -137,14 +140,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
     if (body.listName && !listName) return bad("We can't find that name on the list.");
     const all = await people();
     // this phone's own check-in (changing your name or email) keeps its key card
-    const own = typeof body.card === "string" && typeof body.by === "string" ? all.find((p) => p.card === body.card && p.id === body.by) : undefined;
+    const own = (await whoIs(body.card, body.by, body.key)) ?? undefined;
     const removed = (await rows("people")).some((r) => REMOVED.has(String(r.card)) && (r.card === body.card || r.email === email));
     if (removed && !own) return bad("This check-in was removed by the organisers. Check in with your own name and email.", 409);
-    const sameEmail = all.find((p) => p.email === email && p !== own);
+    const sameEmail = all.find((p) => p.email === email && p.id !== own?.id);
     if (sameEmail)
       return bad(`"${`${sameEmail.first} ${sameEmail.last}`.trim()}" already checked in with this email. If that's you, tap "Log back in" and use your code words.`, 409);
     const keep = listName ?? (own ? own.listName : undefined);
-    const taken = keep ? claimedBy(keep, all.filter((p) => p !== own)) : undefined;
+    const taken = keep ? claimedBy(keep, all.filter((p) => p.id !== own?.id)) : undefined;
     if (taken)
       return bad(`${keep} is already checked in (as "${`${taken.first} ${taken.last}`.trim()}"). If that's you, tap "Log back in" and use your code words.`, 409);
     const card = own?.card ?? (await newCard(new Set((await rows("people")).map((p) => String(p.card)))));
@@ -152,7 +155,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
     const id = own?.id ?? `p-${randomInt(36 ** 8).toString(36)}`;
     const row: PersonRow = { id, card, first: name, last: "", sex: body.sex === "m" ? "m" : "f", email, ...(keep ? { listName: keep } : {}) };
     await save("people", row);
-    return NextResponse.json({ ...row, words: await wordsFor(card), again: false });
+    return NextResponse.json({ ...row, words: await wordsFor(card), key: await deviceKey(card), again: false });
   }
 
   if (action === "admin") {
@@ -168,11 +171,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
     if (!sameWords(body.words, words)) return bad("Those code words don't match. Check your screenshot, or ask an organiser.", 401);
     const { phone: _phone, ...row } = p;
     void _phone;
-    return NextResponse.json({ ...row, words, again: true });
+    return NextResponse.json({ ...row, words, key: await deviceKey(p.card), again: true });
   }
 
 
-  const me = await whoIs(body.card, body.by);
+  if (action === "key") {
+    // a phone checked in before device keys existed: its key card, id and the email it checked in
+    // with (kept on that phone, never shown to anyone else) get it its key
+    const p = (await people()).find((x) => x.card === body.card && x.id === body.by);
+    const email = clean(body.email, 120).toLowerCase();
+    if (!p || !email || p.email !== email) return bad("Log back in with your name and code words.", 401);
+    return NextResponse.json({ key: await deviceKey(p.card) });
+  }
+
+  const me = await whoIs(body.card, body.by, body.key);
   if (!me) return bad("Check in at the gate first: your key card isn't on this device.", 401);
 
   if (action === "order") {

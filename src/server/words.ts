@@ -1,5 +1,5 @@
 import "server-only";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { rows, save } from "./storage";
 
 // Code words: three easy words per guest ("mango drum kite"), shown when you check in so you can
@@ -34,6 +34,22 @@ async function secret() {
 export async function wordsFor(card: string) {
   const h = createHmac("sha256", await secret()).update(card).digest();
   return [0, 1, 2].map((i) => WORDS[h.readUInt16BE(i * 2) % WORDS.length]).join(" ");
+}
+
+/**
+ * This key card's device key: a long secret each phone gets when it checks in or logs back in,
+ * and sends with everything it saves. Only the server can make it, so knowing someone's key card
+ * (or anything else the app shows) isn't enough to act as them.
+ */
+export async function deviceKey(card: string) {
+  return createHmac("sha256", await secret()).update(`device:${card}`).digest("hex").slice(0, 32);
+}
+
+/** Is this the right device key for this key card? */
+export async function rightKey(typed: unknown, card: string) {
+  if (typeof typed !== "string") return false;
+  const a = Buffer.from(typed), b = Buffer.from(await deviceKey(card));
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 /** Do these typed words match? Any case, any order, any spaces or commas. */
